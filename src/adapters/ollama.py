@@ -33,9 +33,9 @@ class OllamaAdapter(LLMAdapter):
         self.endpoint = endpoint.rstrip("/")
         self.timeout = timeout
 
-    def extract(self, markdown: str, schema: dict) -> dict:
+    def extract(self, markdown: str, schema: dict, instructions: str | None = None) -> dict:
         """Send markdown + schema to Ollama and parse the JSON response."""
-        prompt = self._build_prompt(markdown, schema)
+        prompt = self._build_prompt(markdown, schema, instructions)
 
         response = httpx.post(
             f"{self.endpoint}/api/chat",
@@ -76,9 +76,24 @@ class OllamaAdapter(LLMAdapter):
             logger.warning("Ollama server not reachable at %s", self.endpoint)
             return False
 
-    def _build_prompt(self, markdown: str, schema: dict) -> str:
+    def _build_prompt(
+        self,
+        markdown: str,
+        schema: dict,
+        instructions: str | None = None,
+    ) -> str:
         """Build the extraction prompt with schema and markdown content."""
         schema_str = json.dumps(schema, indent=2)
+
+        if instructions:
+            # Use manufacturer-specific prompt from YAML config
+            return (
+                f"{instructions}\n\n"
+                f"Return a JSON object matching this schema:\n\n"
+                f"```json\n{schema_str}\n```\n\n"
+                f"MARKDOWN CONTENT:\n\n{markdown}"
+            )
+
         return (
             "Extract the paraglider technical specifications from the following "
             "markdown content. Return a JSON object matching this schema:\n\n"
@@ -87,7 +102,11 @@ class OllamaAdapter(LLMAdapter):
             "- Extract ONLY factual technical data (no marketing text)\n"
             "- All numeric values must be plain numbers (no units)\n"
             "- Return one entry per size in the specs table\n"
-            "- If a field is not found, omit it from the output\n\n"
-            "MARKDOWN CONTENT:\n\n"
-            f"{markdown}"
+            "- If a field is not found, omit it from the output\n"
+            "- 'Certified Weight Range' or 'In-Flight Weight Range' → split into "
+            "ptv_min_kg and ptv_max_kg (e.g. '65-85' → min=65, max=85)\n"
+            "- 'Glider Weight' → wing_weight_kg\n"
+            "- 'Certification' or 'EN/LTF' → certification class letter (A, B, C, D, or CCC)\n"
+            "- 'Number of Cells' → cell_count (top-level, not per-size)\n\n"
+            f"MARKDOWN CONTENT:\n\n{markdown}"
         )

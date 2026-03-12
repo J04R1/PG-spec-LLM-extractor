@@ -13,6 +13,7 @@ import logging
 from typing import Optional
 
 from .adapters.base import LLMAdapter
+from .markdown_parser import parse_specs_from_markdown
 from .models import ExtractionResult, SizeSpec
 
 logger = logging.getLogger(__name__)
@@ -24,23 +25,52 @@ def get_extraction_schema() -> dict:
 
 
 def extract_specs(
+    adapter: LLMAdapter | None,
+    markdown: str,
+    config: dict,
+    url: str | None = None,
+) -> Optional[ExtractionResult]:
+    """Extract paraglider specs from markdown using LLM with markdown fallback.
+
+    Strategy:
+      1. If an adapter is provided, try LLM extraction first.
+      2. If LLM fails or no adapter, fall back to deterministic markdown parser.
+
+    Args:
+        adapter: An LLMAdapter implementation (Ollama, etc.), or None.
+        markdown: Rendered page markdown content.
+        config: Manufacturer YAML config dict (for llm_hints injection).
+        url: Optional product URL to inject into the result.
+
+    Returns:
+        Validated ExtractionResult or None if both strategies fail.
+    """
+    result = None
+
+    # Strategy 1: LLM extraction
+    if adapter is not None:
+        result = _extract_via_llm(adapter, markdown, config, url)
+
+    # Strategy 2: Markdown parser fallback
+    if result is None:
+        if adapter is not None:
+            logger.info("LLM extraction failed — trying markdown parser fallback")
+        result = _extract_via_markdown(markdown, url)
+
+    return result
+
+
+def _extract_via_llm(
     adapter: LLMAdapter,
     markdown: str,
     config: dict,
+    url: str | None = None,
 ) -> Optional[ExtractionResult]:
-    """Extract paraglider specs from markdown using the given LLM adapter.
-
-    Args:
-        adapter: An LLMAdapter implementation (Ollama, etc.)
-        markdown: Rendered page markdown content.
-        config: Manufacturer YAML config dict (for llm_hints injection).
-
-    Returns:
-        Validated ExtractionResult or None if extraction fails.
-    """
+    """Try LLM-based extraction."""
     schema = get_extraction_schema()
 
-    # Inject manufacturer-specific hints into the schema description if present
+    instructions = config.get("extraction", {}).get("llm", {}).get("prompt")
+
     llm_hints = config.get("extraction", {}).get("llm_hints")
     if llm_hints:
         schema["description"] = (
@@ -49,14 +79,34 @@ def extract_specs(
         )
 
     try:
-        raw = adapter.extract(markdown, schema)
+        raw = adapter.extract(markdown, schema, instructions=instructions)
         result = ExtractionResult.model_validate(raw)
+
+        if url and not result.product_url:
+            result.product_url = url
+
         logger.info(
-            "Extracted: %s — %d sizes",
+            "LLM extracted: %s — %d sizes",
             result.model_name,
             len(result.sizes),
         )
         return result
     except Exception:
-        logger.exception("Extraction failed")
+        logger.exception("LLM extraction failed")
+        return None
+
+
+def _extract_via_markdown(
+    markdown: str,
+    url: str | None = None,
+) -> Optional[ExtractionResult]:
+    """Try deterministic markdown table parsing."""
+    if not url:
+        logger.warning("Markdown parser requires a URL for model name inference")
+        return None
+
+    try:
+        return parse_specs_from_markdown(markdown, url)
+    except Exception:
+        logger.exception("Markdown parser failed")
         return None

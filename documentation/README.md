@@ -10,8 +10,13 @@ Iteration numbers are **global** across all folders (chronological project order
 | # | File | Folder | Description | Status |
 |---|------|--------|-------------|--------|
 | 01 | `ITERATION_01_PROJECT_FOUNDATION.md` | `architecture/` | Modular project structure, Pydantic models, DB, normalizer, CLI, compliance baseline | Complete |
+| 02 | `ITERATION_02_CRAWLER_MODULE.md` | `architecture/` | Crawl4AI wrapper, URL discovery, robots.txt, dedup, crash recovery, pipeline wiring | Complete |
+| 03 | `ITERATION_03_LLM_EXTRACTION.md` | `architecture/` | Ollama adapter wiring, extraction prompt, config integration, batch pipeline | Complete |
+| 04 | `ITERATION_04_MARKDOWN_FALLBACK.md` | `architecture/` | Deterministic markdown parser, auto-fallback, 43 label mappings, EU decimals | Complete |
+| 05 | `ITERATION_05_NORMALIZATION_SQLITE.md` | `architecture/` | Storage wiring, CSV export, --convert-only, provenance tracking | Complete |
+| 06 | `ITERATION_06_PIPELINE_CLI.md` | `architecture/` | CLI finalization, status command, --retry-failed, full flow wiring | Complete |
 
-**Next iteration number: 02**
+**Next iteration number: 07**
 
 ---
 

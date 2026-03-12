@@ -6,6 +6,10 @@ __pycache__/
 venv/
 *.egg
 
+# scraper artifacts
+data/dhv_cache/
+data/dhv_checkpoint.json
+
 # Output data (generated, not tracked)
 output/*.json
 output/*.csv

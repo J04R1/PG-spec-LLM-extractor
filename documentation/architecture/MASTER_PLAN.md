@@ -126,10 +126,10 @@ See `documentation/security/DATA_COMPLIANCE_GUIDELINES.md` for full legal and et
 | Iteration | Status |
 |-----------|--------|
 | 01 — Project Structure & Schema | ✅ Complete |
-| 02 — Crawler Module | ⬜ Not started |
-| 03 — LLM Adapter & Ollama | ⬜ Not started |
-| 04 — Markdown Fallback | ⬜ Not started |
-| 05 — Normalization & SQLite | ⬜ Not started |
-| 06 — Pipeline Orchestrator & CLI | ⬜ Not started |
+| 02 — Crawler Module | ✅ Complete |
+| 03 — LLM Adapter & Ollama | ✅ Complete |
+| 04 — Markdown Fallback | ✅ Complete |
+| 05 — Normalization & SQLite | ✅ Complete |
+| 06 — Pipeline Orchestrator & CLI | ✅ Complete |
 | 07 — Ozone Validation Run | ⬜ Not started |
 | 08 — Second Manufacturer & Polish | ⬜ Not started |
