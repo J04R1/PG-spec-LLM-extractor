@@ -11,6 +11,7 @@ output/*.json
 output/*.csv
 output/*.partial
 output/*.tmp
+output/*.db
 !output/.gitkeep
 
 # OS

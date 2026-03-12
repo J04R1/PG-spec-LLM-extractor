@@ -3,7 +3,7 @@
 **Created:** March 12, 2026
 **Status:** Production — Successfully extracted 111 Ozone models (466 size variants)
 **Location:** `tools/spec-extractor/`
-**Iteration:** 09 (see `documentation/data/ITERATION_09_EXTRACTION_FRAMEWORK.md`)
+**Iterations:** 09 in total (see OpenParaglider project for reference: `documentation/data/ITERATION_09_EXTRACTION_FRAMEWORK.md`)
 
 ---
 

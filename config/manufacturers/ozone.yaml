@@ -1,0 +1,139 @@
+# Ozone Paraglider Specs — Extraction Config
+# Used by: tools/spec-extractor/extract.py
+
+manufacturer:
+  name: Ozone
+  slug: ozone
+  website: https://flyozone.com
+
+sources:
+  previous_gliders:
+    listing_url: https://flyozone.com/paragliders/products/previous-gliders
+    url_pattern: "/products/gliders/"
+    is_current: false
+    url_excludes:
+      - "#"
+      - "?"
+      - "sitemap.xml"
+      - "/products/previous-gliders"
+      - "/products/harnesses"
+      - "/products/reserves"
+      - "/products/accessories"
+
+  current_gliders:
+    listing_url: https://flyozone.com/paragliders/products/gliders
+    url_pattern: "/products/gliders/"
+    is_current: true
+    url_excludes:
+      - "#"
+      - "?"
+      - "sitemap.xml"
+      - "/products/previous-gliders"
+      - "/products/harnesses"
+      - "/products/reserves"
+      - "/products/accessories"
+
+extraction:
+  # Markdown strategy: free, no LLM needed.
+  # Crawl4AI renders the JS page → converts to markdown → parser extracts spec tables.
+  # Falls back to LLM strategy if user provides an API key at runtime.
+  strategy: markdown
+
+  llm:
+    provider: "gemini/gemini-2.0-flash"
+    api_key_env: "GEMINI_API_KEY"
+
+    prompt: |
+      Extract ONLY the factual technical specifications from this Ozone paraglider product page.
+
+      RULES:
+      - Read the technical specs table carefully. Each column is a size (XS, S, MS, ML, L, XL, etc.)
+      - "Certified Weight Range" or "In-Flight Weight Range" gives ptv_min_kg and ptv_max_kg (split the range like "65-85" into min=65, max=85)
+      - "Glider Weight" gives wing_weight_kg
+      - "Certification" or "EN/LTF" gives the certification class letter (A, B, C, D, or CCC)
+      - "Number of Cells" is the cell_count (usually same for all sizes — put it at top level, not per-size)
+      - If line materials are listed (e.g. in a "Materials" section), capture them as a single string
+      - For target_use: EN-A wings = "school" or "leisure", EN-B = "leisure" or "xc", EN-C = "xc", EN-D = "competition", CCC = "competition"
+      - For category: use "tandem" only for tandem wings, "acro" for acro/freestyle wings, "paraglider" for everything else
+      - DO NOT extract marketing descriptions, pilot reviews, or any prose text
+      - DO NOT extract image URLs
+      - All numeric values must be plain numbers (no units, no "kg", no "m²")
+      - Return one size entry per column in the specs table
+
+    schema:
+      type: object
+      properties:
+        model_name:
+          type: string
+          description: "Wing model name without manufacturer (e.g. 'Buzz Z6', 'Delta 4', 'Zeno')"
+        category:
+          type: string
+          enum: ["paraglider", "tandem", "miniwing", "single_skin", "acro", "speedwing", "paramotor"]
+          description: "Wing category. Use 'paraglider' for standard, XC, and competition wings"
+        target_use:
+          type: string
+          enum: ["school", "leisure", "xc", "competition", "hike_and_fly", "vol_biv", "acro", "tandem"]
+          description: "Primary intended use"
+        cell_count:
+          type: integer
+          description: "Number of cells (same across all sizes)"
+        line_material:
+          type: string
+          description: "Line materials as listed in specs"
+        product_url:
+          type: string
+          description: "Full URL of this product page"
+        sizes:
+          type: array
+          description: "One entry per size in the specs table"
+          items:
+            type: object
+            properties:
+              size_label:
+                type: string
+                description: "Size name exactly as shown (e.g. 'XS', 'S', 'MS', 'ML', 'L')"
+              flat_area_m2:
+                type: number
+                description: "Flat area in m²"
+              flat_span_m:
+                type: number
+                description: "Flat span in metres"
+              flat_aspect_ratio:
+                type: number
+                description: "Flat aspect ratio"
+              proj_area_m2:
+                type: number
+                description: "Projected area in m²"
+              proj_span_m:
+                type: number
+                description: "Projected span in metres"
+              proj_aspect_ratio:
+                type: number
+                description: "Projected aspect ratio"
+              wing_weight_kg:
+                type: number
+                description: "Glider weight in kg"
+              ptv_min_kg:
+                type: number
+                description: "Minimum certified weight range in kg"
+              ptv_max_kg:
+                type: number
+                description: "Maximum certified weight range in kg"
+              certification:
+                type: string
+                description: "EN/LTF class for this size (e.g. 'A', 'B', 'C', 'D', 'CCC')"
+            required: ["size_label", "ptv_min_kg", "ptv_max_kg", "certification"]
+      required: ["model_name", "sizes"]
+
+  # CSS strategy (for future use — requires inspecting rendered DOM)
+  # css:
+  #   schema:
+  #     name: "OzoneSpecs"
+  #     baseSelector: "table.specs-table tr"
+  #     fields:
+  #       - name: "size_label"
+  #         selector: "th"
+  #         type: "text"
+  #       - name: "flat_area_m2"
+  #         selector: "td:nth-child(2)"
+  #         type: "text"

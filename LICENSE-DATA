@@ -1,0 +1,26 @@
+# Data License — Open Database License (ODbL 1.0)
+
+All **extracted paraglider specification data** produced by this pipeline is
+licensed under the [Open Database License v1.0 (ODbL)](https://opendatacommons.org/licenses/odbl/1-0/).
+
+## Summary
+
+- **Share** — You are free to copy, distribute, and use the database.
+- **Create** — You are free to produce works from the database.
+- **Adapt** — You are free to modify, transform, and build upon the database.
+
+As long as you:
+
+- **Attribute** — Credit OpenParaglider as the source in any public use.
+- **Share-Alike** — If you redistribute a modified version, use ODbL or a compatible license.
+- **Keep Open** — If you redistribute the database, do not apply technological restrictions (e.g., DRM).
+
+## Full License Text
+
+The full ODbL 1.0 text is available at:
+https://opendatacommons.org/licenses/odbl/1-0/
+
+## Scope
+
+This license applies **only to the extracted data** (SQLite/JSON/CSV outputs).
+The pipeline source code is licensed separately under MIT (see `LICENSE`).
