@@ -106,23 +106,38 @@ class ParagliderSpec(BaseModel):
 
 ### 4.2 Certification Normalization Map
 
-| Raw value (examples) | Canonical output |
-|----------------------|-----------------|
-| EN-A, EN A, LTF A, DHV 1, A | EN-A |
-| EN-B, EN B, LTF B, DHV 1-2, B | EN-B |
-| EN-C, EN C, LTF C, DHV 2, DHV 2-3, C | EN-C |
-| EN-D, EN D, DHV 3, D | EN-D |
-| CCC, CIVL CCC | CCC |
+Certification strings are normalized into a `(standard, classification)` pair. The standard identifies the certification body; the classification is the letter grade.
+
+| Raw value (examples) | Standard | Classification | Notes |
+|----------------------|----------|---------------|-------|
+| EN A, EN-A, LTF A, DHV 1, bare "A" | EN / LTF | A | DHV 1 → LTF A; bare letter defaults to EN |
+| EN B, EN-B, EN/LTF B, LTF/EN B, DHV 1-2, bare "B" | EN / LTF | B | Combined EN/LTF format preserved as EN |
+| EN C, EN-C, LTF C, DHV 2, DHV 2-3, bare "C" | EN / LTF | C | |
+| EN D, EN-D, DHV 3, bare "D" | EN | D | |
+| CCC, CIVL CCC | CCC | CCC | Classification is always "CCC" |
+
+**Key rules:**
+- `EN/LTF B` and `LTF/EN B` (common Ozone format) → `(EN, "B")` — EN takes priority
+- DHV numbering is converted to LTF equivalent (DHV 1→A, DHV 1-2→B, DHV 2→C, DHV 3→D)
+- Bare single letter (A/B/C/D) defaults to EN standard
+- Unrecognized strings → `(other, raw_value)` with a warning logged
 
 ### 4.3 Size Normalization Map
 
-| Raw value (examples) | Canonical output |
-|----------------------|-----------------|
-| XS, Extra Small, 1, 18, 70 | XS |
-| S, Small, 2, 19, 75, SM | S |
-| M, Medium, 3, 20, 80, MD | M |
-| L, Large, 4, 21, 85, LG | L |
-| XL, Extra Large, 5, 22, 90 | XL |
+Size labels are normalized to canonical form when they match known text aliases. **Numeric and non-standard labels are preserved as-is** to avoid data loss — they represent manufacturer-specific sizing systems (e.g., Advance uses flat area in m² as size labels).
+
+| Raw value (examples) | Canonical output | Notes |
+|----------------------|-----------------|-------|
+| XS, Extra Small, 1 | XS | Single-digit positional only |
+| S, Small, 2, SM | S | |
+| M, Medium, 3, MD | M | |
+| L, Large, 4, LG | L | |
+| XL, Extra Large, 5 | XL | |
+| MS, ML | MS, ML | **Preserved** — Ozone intermediate sizes |
+| 21, 23, 25, 27, 29 | 21, 23, 25, 27, 29 | **Preserved** — Advance area-based sizing |
+| XXS, XXL, XXXL | XXS, XXL, XXXL | **Preserved** — non-standard sizes |
+
+> **Design decision (Iteration 09):** Double-digit numeric labels (16–31) and weight-based labels (70, 85, etc.) are no longer mapped to alpha equivalents. Previous mappings like 21→L or 85→L were incorrect for manufacturers that use flat area as their size naming convention.
 
 ---
 

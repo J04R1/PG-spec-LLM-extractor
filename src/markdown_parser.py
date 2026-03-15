@@ -72,6 +72,7 @@ _MD_ROW_MAP: dict[str, tuple[str, bool, bool]] = {
 _SIZE_LABEL_HINTS = {
     "xs", "s", "ms", "sm", "m", "ml", "l", "xl", "xxl",
     "xxs", "xxxl",
+    "16", "17", "18", "19", "20", "21",
     "22", "23", "24", "25", "26", "27", "28", "29", "30", "31",
 }
 

@@ -59,6 +59,13 @@ def normalize_certification(raw: str) -> tuple[CertStandard, str]:
     if re.match(r"(?:CIVL\s*)?CCC", raw, re.IGNORECASE):
         return CertStandard.CCC, "CCC"
 
+    # Handle combined "EN/LTF" or "LTF/EN" labels (common Ozone format)
+    combined = re.match(
+        r"(?:EN\s*/\s*LTF|LTF\s*/\s*EN)\s*([A-D])", raw, re.IGNORECASE
+    )
+    if combined:
+        return CertStandard.EN, combined.group(1).upper()
+
     # Handle DHV numbering
     dhv_match = re.match(r"DHV\s*(\d(?:-\d)?)", raw, re.IGNORECASE)
     if dhv_match:
@@ -88,19 +95,19 @@ def normalize_certification(raw: str) -> tuple[CertStandard, str]:
 # ── Size label normalization ───────────────────────────────────────────────────
 
 _SIZE_MAP = {
-    "extra small": "XS", "xs": "XS", "1": "XS", "18": "XS", "70": "XS",
-    "small": "S", "s": "S", "sm": "S", "2": "S", "19": "S", "75": "S",
-    "medium": "M", "m": "M", "md": "M", "3": "M", "20": "M", "80": "M",
-    "large": "L", "l": "L", "lg": "L", "4": "L", "21": "L", "85": "L",
-    "extra large": "XL", "xl": "XL", "5": "XL", "22": "XL", "90": "XL",
+    "extra small": "XS", "xs": "XS", "1": "XS",
+    "small": "S", "s": "S", "sm": "S", "2": "S",
+    "medium": "M", "m": "M", "md": "M", "3": "M",
+    "large": "L", "l": "L", "lg": "L", "4": "L",
+    "extra large": "XL", "xl": "XL", "5": "XL",
 }
 
 
 def normalize_size_label(raw: str) -> str:
     """Normalize a size label to canonical form (XS/S/M/L/XL).
 
-    Non-standard labels (MS, ML, SM, etc.) are preserved as-is to avoid
-    data loss — they may represent manufacturer-specific intermediate sizes.
+    Non-standard labels (MS, ML, SM, etc.) and numeric labels (21, 23, 25)
+    are preserved as-is — they represent manufacturer-specific sizing systems.
     """
     key = raw.strip().lower()
     return _SIZE_MAP.get(key, raw.strip().upper())
