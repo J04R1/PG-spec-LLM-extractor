@@ -23,12 +23,14 @@ import typer
 from dotenv import load_dotenv
 
 from .adapters.ollama import OllamaAdapter
+from .benchmark import benchmark_database
 from .config import load_config, get_output_paths
 from .crawler import Crawler, deduplicate_urls
 from .db import Database
 from .extractor import extract_specs
-from .models import EntityType, ExtractionResult, Manufacturer
+from .models import ExtractionResult, Manufacturer, TargetUse
 from .normalizer import normalize_certification, normalize_extraction
+from .seed_import import import_enrichment_csv
 
 load_dotenv()
 
@@ -176,6 +178,51 @@ def reset(
             typer.echo(f"Not found: {p}")
 
 
+@app.command()
+def seed(
+    csv_file: str = typer.Option(..., "--csv", help="Path to enrichment CSV"),
+    db_path: str = typer.Option("output/seed.db", "--db", help="Output database path"),
+    method: str = typer.Option("llm_enrichment_csv", "--method", help="Extraction method label"),
+) -> None:
+    """Import an enrichment CSV as seed data into the database."""
+    csv_p = Path(csv_file)
+    if not csv_p.exists():
+        typer.echo(f"ERROR: CSV not found: {csv_p}", err=True)
+        raise typer.Exit(1)
+
+    db = Database(db_path)
+    db.connect()
+    try:
+        counts = import_enrichment_csv(csv_p, db, extraction_method=method)
+    finally:
+        db.close()
+
+    typer.echo(f"Imported from {csv_p.name}:")
+    for key, val in counts.items():
+        typer.echo(f"  {key}: {val}")
+    typer.echo(f"Database: {db_path}")
+
+
+@app.command()
+def benchmark(
+    db_path: str = typer.Option(..., "--db", help="Path to database to benchmark"),
+    json_output: bool = typer.Option(False, "--json", help="Output JSON instead of text"),
+) -> None:
+    """Score a database for completeness, quality, and accuracy."""
+    db_p = Path(db_path)
+    if not db_p.exists():
+        typer.echo(f"ERROR: Database not found: {db_p}", err=True)
+        raise typer.Exit(1)
+
+    report = benchmark_database(db_p)
+
+    if json_output:
+        import json as json_mod
+        typer.echo(json_mod.dumps(report.summary(), indent=2))
+    else:
+        typer.echo(report.format_report())
+
+
 def _run_single_url(url: str, dry_run: bool = False, config: dict | None = None) -> None:
     """Extract specs from a single URL (test mode)."""
     if dry_run:
@@ -308,7 +355,7 @@ def _finalize_results(results: list[dict], output_path: Path) -> None:
 
 _CSV_COLUMNS = [
     "manufacturer_slug", "name", "year", "category", "target_use", "is_current",
-    "cell_count", "line_material", "riser_config", "manufacturer_url", "description",
+    "cell_count", "line_material", "riser_config", "manufacturer_url",
     "size_label", "flat_area_m2", "flat_span_m", "flat_aspect_ratio",
     "proj_area_m2", "proj_span_m", "proj_aspect_ratio",
     "wing_weight_kg", "ptv_min_kg", "ptv_max_kg",
@@ -396,14 +443,10 @@ def _store_to_db(
         mfr = Manufacturer(
             name=mfr_cfg["name"],
             slug=manufacturer_slug,
-            country=mfr_cfg.get("country"),
+            country_code=mfr_cfg.get("country"),
             website=mfr_cfg.get("website"),
         )
         mfr_id = db.upsert_manufacturer(mfr)
-        db.record_provenance(
-            EntityType.manufacturer, mfr_id,
-            mfr_cfg.get("website"), manufacturer_slug,
-        )
 
         stored = 0
         for record in results:
@@ -415,28 +458,34 @@ def _store_to_db(
             is_current = record.get("is_current", True)
             source_url = record.get("product_url")
 
-            wing, sizes, certs = normalize_extraction(
+            wing, sizes, certs, perfs = normalize_extraction(
                 extraction, manufacturer_slug,
                 is_current=is_current, source_url=source_url,
             )
 
             model_id = db.upsert_model(wing, mfr_id)
+
+            # Store target_use from extraction (single → junction table)
+            if extraction.target_use:
+                try:
+                    target = TargetUse(extraction.target_use)
+                    db.upsert_model_target_use(model_id, target)
+                except ValueError:
+                    pass
+
+            # Record provenance
             db.record_provenance(
-                EntityType.model, model_id, source_url, manufacturer_slug,
+                model_id, source_url, manufacturer_slug,
             )
 
             for i, sv in enumerate(sizes):
                 sv_id = db.upsert_size_variant(sv, model_id)
-                db.record_provenance(
-                    EntityType.size_variant, sv_id, source_url, manufacturer_slug,
-                )
 
                 if i < len(certs):
-                    cert_id = db.insert_certification(certs[i], sv_id)
-                    db.record_provenance(
-                        EntityType.certification, cert_id,
-                        source_url, manufacturer_slug,
-                    )
+                    db.insert_certification(certs[i], sv_id)
+
+                if i < len(perfs):
+                    db.insert_performance_data(perfs[i], sv_id)
 
             stored += 1
 

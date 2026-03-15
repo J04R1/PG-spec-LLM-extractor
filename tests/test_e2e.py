@@ -11,7 +11,7 @@ from pathlib import Path
 from src.db import Database
 from src.extractor import extract_specs
 from src.markdown_parser import parse_specs_from_markdown
-from src.models import EntityType, Manufacturer
+from src.models import Manufacturer
 from src.normalizer import normalize_extraction
 from src.pipeline import _CSV_COLUMNS, _export_csv
 
@@ -35,12 +35,12 @@ def _setup_full_pipeline(tmp_path, markdown, url, mfr_slug, mfr_name, mfr_countr
     result = extract_specs(None, markdown, {}, url=url)
     assert result is not None, f"extract_specs returned None for {url}"
 
-    wing, sizes, certs = normalize_extraction(result, mfr_slug, source_url=url)
+    wing, sizes, certs, perfs = normalize_extraction(result, mfr_slug, source_url=url)
 
     db = Database(tmp_path / "test.db")
     db.connect()
 
-    mfr = Manufacturer(name=mfr_name, slug=mfr_slug, country=mfr_country)
+    mfr = Manufacturer(name=mfr_name, slug=mfr_slug, country_code=mfr_country)
     mfr_id = db.upsert_manufacturer(mfr)
     model_id = db.upsert_model(wing, mfr_id)
 
@@ -50,9 +50,8 @@ def _setup_full_pipeline(tmp_path, markdown, url, mfr_slug, mfr_name, mfr_countr
         size_ids[sv.size_label] = sv_id
         if i < len(certs):
             db.insert_certification(certs[i], sv_id)
-        db.record_provenance(EntityType.size_variant, sv_id, url, mfr_slug)
 
-    db.record_provenance(EntityType.model, model_id, url, mfr_slug)
+    db.record_provenance(model_id, url, mfr_slug)
 
     return db, mfr_id, model_id, size_ids, result
 
@@ -99,12 +98,12 @@ class TestE2ESwift6:
         db.close()
 
     def test_provenance_records_exist(self, tmp_path):
-        db, _, _, size_ids, _ = _setup_full_pipeline(
+        db, _, model_id, size_ids, _ = _setup_full_pipeline(
             tmp_path, SWIFT6_MARKDOWN, SWIFT6_URL, "ozone", "Ozone", "FR"
         )
-        count = db.conn.execute("SELECT COUNT(*) FROM data_sources").fetchone()[0]
-        # 5 size_variant + 1 model = 6
-        assert count >= 6
+        count = db.conn.execute("SELECT COUNT(*) FROM provenance").fetchone()[0]
+        # 1 provenance record per model
+        assert count >= 1
         db.close()
 
     def test_strict_spec_values_from_db(self, tmp_path):
@@ -231,11 +230,11 @@ class TestE2EIdempotency:
         """Run the full pipeline twice — no duplicate records."""
         db_path = tmp_path / "test.db"
         url = SWIFT6_URL
-        mfr = Manufacturer(name="Ozone", slug="ozone", country="FR")
+        mfr = Manufacturer(name="Ozone", slug="ozone", country_code="FR")
 
         for _ in range(2):
             result = extract_specs(None, SWIFT6_MARKDOWN, {}, url=url)
-            wing, sizes, certs = normalize_extraction(result, "ozone", source_url=url)
+            wing, sizes, certs, perfs = normalize_extraction(result, "ozone", source_url=url)
 
             db = Database(db_path)
             db.connect()
@@ -258,7 +257,7 @@ class TestE2EMockAdapter:
         result = extract_specs(MockAdapter(), "ignored markdown", {}, url=SWIFT6_URL)
         assert result is not None
 
-        wing, sizes, certs = normalize_extraction(result, "ozone", source_url=SWIFT6_URL)
+        wing, sizes, certs, perfs = normalize_extraction(result, "ozone", source_url=SWIFT6_URL)
         db = Database(tmp_path / "test.db")
         db.connect()
 

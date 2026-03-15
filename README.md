@@ -14,8 +14,9 @@ and only communicates with the main project via CSV files dropped into `data/`.
 ```
 spec-extractor/
 ├── extract.py            # Main CLI entrypoint
-├── configs/              # One YAML file per manufacturer
-│   └── ozone.yaml
+├── config/
+│   └── manufacturers/   # One YAML file per manufacturer
+│       └── ozone.yaml
 ├── strategies/           # Pluggable extraction strategies
 │   ├── css_strategy.py   # CSS selector-based (zero LLM cost)
 │   └── llm_strategy.py   # LLM-powered fallback (Gemini free tier)
@@ -67,30 +68,30 @@ cd tools/spec-extractor
 source .venv/bin/activate
 
 # Extract previous Ozone gliders
-python extract.py --config configs/ozone.yaml
+python extract.py --config config/manufacturers/ozone.yaml
 
 # Map URLs only (no extraction, just discover product pages)
-python extract.py --config configs/ozone.yaml --map-only
+python extract.py --config config/manufacturers/ozone.yaml --map-only
 
 # Extract a single URL (for testing)
 python extract.py --url https://flyozone.com/paragliders/products/gliders/rush-5
 
 # Retry failed extractions
-python extract.py --config configs/ozone.yaml --retry-failed
+python extract.py --config config/manufacturers/ozone.yaml --retry-failed
 
 # Convert existing raw JSON to CSV (no web requests)
-python extract.py --config configs/ozone.yaml --convert-only
+python extract.py --config config/manufacturers/ozone.yaml --convert-only
 ```
 
 ## Adding a New Manufacturer
 
-1. Copy an existing config: `cp configs/ozone.yaml configs/niviuk.yaml`
+1. Copy an existing config: `cp config/manufacturers/ozone.yaml config/manufacturers/niviuk.yaml`
 2. Update the URLs, selectors, and field mappings
 3. Run with `--map-only` to verify URL discovery
 4. Run a test extraction on 2–3 pages
 5. Run full extraction
 
-See `configs/ozone.yaml` for a documented example.
+See `config/manufacturers/ozone.yaml` for a documented example.
 
 ## Output Pipeline
 

@@ -1,8 +1,8 @@
 """
-SQLite storage layer — production-aligned schema.
+SQLite storage layer — schema v2.
 
-Matches the OpenParaglider production Postgres schema exactly:
-  manufacturers, models, size_variants, certifications, data_sources
+7-table schema: manufacturers, models, model_target_uses, size_variants,
+performance_data, certifications, provenance.
 
 Uses upsert logic: create if missing, update only NULL fields.
 """
@@ -16,10 +16,12 @@ from pathlib import Path
 
 from .models import (
     Certification,
-    DataSource,
-    EntityType,
     Manufacturer,
+    ModelTargetUse,
+    PerformanceData,
+    Provenance,
     SizeVariant,
+    TargetUse,
     WingModel,
 )
 
@@ -27,81 +29,112 @@ logger = logging.getLogger(__name__)
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS manufacturers (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    name        TEXT    NOT NULL,
-    slug        TEXT    UNIQUE NOT NULL,
-    country     TEXT,
-    website     TEXT,
-    logo_url    TEXT,
-    created_at  TEXT    DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
-    updated_at  TEXT    DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    name         TEXT    NOT NULL,
+    slug         TEXT    UNIQUE NOT NULL,
+    country_code TEXT,
+    website      TEXT,
+    logo_url     TEXT,
+    created_at   TEXT    DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    updated_at   TEXT    DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 
 CREATE TABLE IF NOT EXISTS models (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    manufacturer_id INTEGER NOT NULL REFERENCES manufacturers(id),
-    name            TEXT    NOT NULL,
-    slug            TEXT    UNIQUE NOT NULL,
-    category        TEXT    CHECK(category IN ('paraglider','tandem','miniwing','single_skin','acro','speedwing','paramotor')),
-    target_use      TEXT    CHECK(target_use IN ('school','leisure','xc','competition','hike_and_fly','vol_biv','acro','tandem')),
-    year            INTEGER,
-    is_current      INTEGER DEFAULT 1,
-    cell_count      INTEGER,
-    line_material   TEXT,
-    riser_config    TEXT,
-    manufacturer_url TEXT,
-    description     TEXT,
-    created_at      TEXT    DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
-    updated_at      TEXT    DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    manufacturer_id   INTEGER NOT NULL REFERENCES manufacturers(id),
+    name              TEXT    NOT NULL,
+    slug              TEXT    UNIQUE NOT NULL,
+    category          TEXT    NOT NULL CHECK(category IN (
+                        'paraglider','tandem','miniwing','single_skin',
+                        'acro','speedwing','paramotor'
+                      )),
+    year_released     INTEGER,
+    year_discontinued INTEGER,
+    is_current        INTEGER DEFAULT 1,
+    cell_count        INTEGER,
+    cell_count_closed INTEGER,
+    line_material     TEXT,
+    riser_config      TEXT,
+    manufacturer_url  TEXT,
+    created_at        TEXT    DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    updated_at        TEXT    DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+
+CREATE TABLE IF NOT EXISTS model_target_uses (
+    model_id    INTEGER NOT NULL REFERENCES models(id),
+    target_use  TEXT    NOT NULL CHECK(target_use IN (
+                  'school','leisure','xc','competition',
+                  'hike_and_fly','vol_biv','acro','speedflying'
+                )),
+    PRIMARY KEY (model_id, target_use)
 );
 
 CREATE TABLE IF NOT EXISTS size_variants (
-    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
-    model_id           INTEGER NOT NULL REFERENCES models(id),
-    size_label         TEXT    NOT NULL,
-    flat_area_m2       REAL,
-    flat_span_m        REAL,
-    flat_aspect_ratio  REAL,
-    proj_area_m2       REAL,
-    proj_span_m        REAL,
-    proj_aspect_ratio  REAL,
-    wing_weight_kg     REAL,
-    ptv_min_kg         REAL,
-    ptv_max_kg         REAL,
-    speed_trim_kmh     REAL,
-    speed_max_kmh      REAL,
-    glide_ratio_best   REAL,
-    min_sink_ms        REAL,
-    created_at         TEXT    DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
-    updated_at         TEXT    DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    model_id            INTEGER NOT NULL REFERENCES models(id),
+    size_label          TEXT    NOT NULL,
+    flat_area_m2        REAL,
+    flat_span_m         REAL,
+    flat_aspect_ratio   REAL,
+    proj_area_m2        REAL,
+    proj_span_m         REAL,
+    proj_aspect_ratio   REAL,
+    wing_weight_kg      REAL,
+    ptv_min_kg          REAL,
+    ptv_max_kg          REAL,
+    line_length_m       REAL,
+    created_at          TEXT    DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    updated_at          TEXT    DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    UNIQUE(model_id, size_label)
+);
+
+CREATE TABLE IF NOT EXISTS performance_data (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    size_variant_id   INTEGER NOT NULL REFERENCES size_variants(id),
+    speed_trim_kmh    REAL,
+    speed_max_kmh     REAL,
+    glide_ratio_best  REAL,
+    min_sink_ms       REAL,
+    source_type       TEXT    NOT NULL DEFAULT 'manufacturer_stated'
+                      CHECK(source_type IN (
+                        'manufacturer_stated','test_report','independent_test'
+                      )),
+    created_at        TEXT    DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 
 CREATE TABLE IF NOT EXISTS certifications (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
     size_variant_id  INTEGER NOT NULL REFERENCES size_variants(id),
-    standard         TEXT    CHECK(standard IN ('EN','LTF','AFNOR','DGAC','CCC','other')),
+    standard         TEXT    NOT NULL CHECK(standard IN (
+                       'EN','LTF','AFNOR','DGAC','CCC','other'
+                     )),
     classification   TEXT,
+    ptv_min_kg       REAL,
+    ptv_max_kg       REAL,
     test_lab         TEXT,
-    test_report_url  TEXT,
+    report_number    TEXT,
+    report_url       TEXT,
     test_date        TEXT,
+    status           TEXT    DEFAULT 'active'
+                     CHECK(status IN ('active','expired','revoked')),
     created_at       TEXT    DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 
-CREATE TABLE IF NOT EXISTS data_sources (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    entity_type     TEXT    NOT NULL CHECK(entity_type IN ('manufacturer','model','size_variant','certification')),
-    entity_id       INTEGER NOT NULL,
-    source_name     TEXT    NOT NULL,
-    source_url      TEXT,
-    contributed_by  TEXT,
-    verified        INTEGER DEFAULT 0,
-    created_at      TEXT    DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+CREATE TABLE IF NOT EXISTS provenance (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    model_id           INTEGER NOT NULL REFERENCES models(id),
+    source_name        TEXT    NOT NULL,
+    source_url         TEXT,
+    accessed_at        TEXT,
+    extraction_method  TEXT,
+    notes              TEXT,
+    created_at         TEXT    DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 """
 
 
 class Database:
-    """SQLite database matching the OpenParaglider production schema."""
+    """SQLite database improving the OpenParaglider production schema."""
 
     def __init__(self, db_path: str | Path):
         self.db_path = Path(db_path)
@@ -138,8 +171,8 @@ class Database:
             return row["id"]
 
         cur = self.conn.execute(
-            "INSERT INTO manufacturers (name, slug, country, website) VALUES (?, ?, ?, ?)",
-            (mfr.name, mfr.slug, mfr.country, mfr.website),
+            "INSERT INTO manufacturers (name, slug, country_code, website) VALUES (?, ?, ?, ?)",
+            (mfr.name, mfr.slug, mfr.country_code, mfr.website),
         )
         self.conn.commit()
         return cur.lastrowid  # type: ignore[return-value]
@@ -154,27 +187,35 @@ class Database:
 
         cur = self.conn.execute(
             """INSERT INTO models
-            (manufacturer_id, name, slug, category, target_use, year,
-             is_current, cell_count, line_material, riser_config,
-             manufacturer_url, description)
+            (manufacturer_id, name, slug, category, year_released,
+             year_discontinued, is_current, cell_count, cell_count_closed,
+             line_material, riser_config, manufacturer_url)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 manufacturer_id,
                 model.name,
                 model.slug,
-                model.category.value if model.category else None,
-                model.target_use.value if model.target_use else None,
-                model.year,
+                model.category.value if model.category else "paraglider",
+                model.year_released,
+                model.year_discontinued,
                 1 if model.is_current else 0,
                 model.cell_count,
+                model.cell_count_closed,
                 model.line_material,
                 model.riser_config,
                 model.manufacturer_url,
-                model.description,
             ),
         )
         self.conn.commit()
         return cur.lastrowid  # type: ignore[return-value]
+
+    def upsert_model_target_use(self, model_id: int, target_use: TargetUse) -> None:
+        """Insert a target use for a model (ignore if already exists)."""
+        self.conn.execute(
+            "INSERT OR IGNORE INTO model_target_uses (model_id, target_use) VALUES (?, ?)",
+            (model_id, target_use.value),
+        )
+        self.conn.commit()
 
     def upsert_size_variant(self, sv: SizeVariant, model_id: int) -> int:
         """Insert or find existing size variant by model_id + size_label. Returns id."""
@@ -189,9 +230,8 @@ class Database:
             """INSERT INTO size_variants
             (model_id, size_label, flat_area_m2, flat_span_m, flat_aspect_ratio,
              proj_area_m2, proj_span_m, proj_aspect_ratio,
-             wing_weight_kg, ptv_min_kg, ptv_max_kg,
-             speed_trim_kmh, speed_max_kmh, glide_ratio_best, min_sink_ms)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+             wing_weight_kg, ptv_min_kg, ptv_max_kg, line_length_m)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 model_id,
                 sv.size_label,
@@ -204,10 +244,26 @@ class Database:
                 sv.wing_weight_kg,
                 sv.ptv_min_kg,
                 sv.ptv_max_kg,
-                sv.speed_trim_kmh,
-                sv.speed_max_kmh,
-                sv.glide_ratio_best,
-                sv.min_sink_ms,
+                sv.line_length_m,
+            ),
+        )
+        self.conn.commit()
+        return cur.lastrowid  # type: ignore[return-value]
+
+    def insert_performance_data(self, perf: PerformanceData, size_variant_id: int) -> int:
+        """Insert a performance data record. Returns id."""
+        cur = self.conn.execute(
+            """INSERT INTO performance_data
+            (size_variant_id, speed_trim_kmh, speed_max_kmh,
+             glide_ratio_best, min_sink_ms, source_type)
+            VALUES (?, ?, ?, ?, ?, ?)""",
+            (
+                size_variant_id,
+                perf.speed_trim_kmh,
+                perf.speed_max_kmh,
+                perf.glide_ratio_best,
+                perf.min_sink_ms,
+                perf.source_type.value,
             ),
         )
         self.conn.commit()
@@ -217,33 +273,40 @@ class Database:
         """Insert a certification record. Returns id."""
         cur = self.conn.execute(
             """INSERT INTO certifications
-            (size_variant_id, standard, classification, test_lab, test_report_url, test_date)
-            VALUES (?, ?, ?, ?, ?, ?)""",
+            (size_variant_id, standard, classification,
+             ptv_min_kg, ptv_max_kg, test_lab, report_number,
+             report_url, test_date, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 size_variant_id,
                 cert.standard.value if cert.standard else None,
                 cert.classification,
+                cert.ptv_min_kg,
+                cert.ptv_max_kg,
                 cert.test_lab,
-                cert.test_report_url,
+                cert.report_number,
+                cert.report_url,
                 str(cert.test_date) if cert.test_date else None,
+                cert.status.value,
             ),
         )
         self.conn.commit()
         return cur.lastrowid  # type: ignore[return-value]
 
-    def insert_data_source(self, ds: DataSource) -> int:
+    def insert_provenance(self, prov: Provenance, model_id: int) -> int:
         """Insert a provenance record. Returns id."""
         cur = self.conn.execute(
-            """INSERT INTO data_sources
-            (entity_type, entity_id, source_name, source_url, contributed_by, verified)
+            """INSERT INTO provenance
+            (model_id, source_name, source_url, accessed_at,
+             extraction_method, notes)
             VALUES (?, ?, ?, ?, ?, ?)""",
             (
-                ds.entity_type.value,
-                ds.entity_id,
-                ds.source_name,
-                ds.source_url,
-                ds.contributed_by,
-                1 if ds.verified else 0,
+                model_id,
+                prov.source_name,
+                prov.source_url,
+                str(prov.accessed_at) if prov.accessed_at else None,
+                prov.extraction_method,
+                prov.notes,
             ),
         )
         self.conn.commit()
@@ -253,19 +316,17 @@ class Database:
 
     def record_provenance(
         self,
-        entity_type: EntityType,
-        entity_id: int,
+        model_id: int,
         source_url: str | None,
         manufacturer_slug: str,
+        extraction_method: str = "llm_qwen25_3b",
     ) -> None:
-        """Record a data_sources provenance entry for any entity."""
-        self.insert_data_source(
-            DataSource(
-                entity_type=entity_type,
-                entity_id=entity_id,
+        """Record a provenance entry for a model."""
+        self.insert_provenance(
+            Provenance(
                 source_name=f"manufacturer_{manufacturer_slug}",
                 source_url=source_url,
-                contributed_by="pg-spec-extractor",
-                verified=False,
-            )
+                extraction_method=extraction_method,
+            ),
+            model_id,
         )

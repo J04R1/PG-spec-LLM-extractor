@@ -18,8 +18,10 @@ Iteration numbers are **global** across all folders (chronological project order
 | 07 | `ITERATION_07_OZONE-VALIDATION.md` | `architecture/` | Ozone Validation Run — 10-model sample, 98.1% field match, 0 data errors | Complete |
 | 08 | `ITERATION_08_SECOND_MANUFACTURER.md` | `architecture/` | Second Manufacturer (Advance) — 8-model sample, 93.9% field match, unit column handling | Complete |
 | 09 | `ITERATION_09_TEST_SUITE.md` | `architecture/` | Pipeline test suite — 129 pytest tests, strict spec assertions, 3 bugs fixed | Complete |
+| 10 | `ITERATION_10_SCHEMA_REDESIGN.md` | `data/` | Schema v2 — 7-table redesign, provenance model, performance separation, 18 decisions | Complete |
+| 11 | `ITERATION_11_SEED_IMPORT_BENCHMARK.md` | `data/` | Seed import + benchmark — CSV import, 3-axis scoring (completeness/quality/accuracy), 60 models baseline | Complete |
 
-**Next iteration number: 10**
+**Next iteration number: 12**
 
 ---
 
@@ -28,7 +30,7 @@ Iteration numbers are **global** across all folders (chronological project order
 | File | Folder | Description |
 |------|--------|-------------|
 | `MASTER_PLAN.md` | `architecture/` | Master plan — 4 phases, 8 iterations, verification criteria, progress tracker |
-| `spec-extractor-v1-implementation.md` | `architecture/` | Full architecture reference for the v1 POC (`extract.py`, 1266 lines) |
+| `spec-extractor-v1-implementation-for-openparaglider.md` | `specs/` | Full architecture reference for the v1 POC (`extract.py`, 1266 lines) |
 | `DATA_COMPLIANCE_GUIDELINES.md` | `security/` | Legal and ethical guardrails for data handling (6 sections) |
 | `paraglider_pipeline_spec.md` | `specs/` | Original pipeline specification |
 

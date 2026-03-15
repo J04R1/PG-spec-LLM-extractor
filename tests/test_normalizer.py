@@ -110,29 +110,29 @@ class TestSlugGeneration:
 class TestNormalizeExtraction:
     def test_swift6_wing_slug(self):
         result = parse_specs_from_markdown(SWIFT6_MARKDOWN, SWIFT6_URL)
-        wing, sizes, certs = normalize_extraction(result, "ozone", source_url=SWIFT6_URL)
+        wing, sizes, certs, perfs = normalize_extraction(result, "ozone", source_url=SWIFT6_URL)
         assert wing.slug == "ozone-swift-6"
 
     def test_swift6_produces_five_sizes(self):
         result = parse_specs_from_markdown(SWIFT6_MARKDOWN, SWIFT6_URL)
-        _, sizes, _ = normalize_extraction(result, "ozone")
+        _, sizes, _, _ = normalize_extraction(result, "ozone")
         assert len(sizes) == 5
 
     def test_swift6_produces_five_certs(self):
         result = parse_specs_from_markdown(SWIFT6_MARKDOWN, SWIFT6_URL)
-        _, _, certs = normalize_extraction(result, "ozone")
+        _, _, certs, _ = normalize_extraction(result, "ozone")
         assert len(certs) == 5
 
     def test_swift6_size_label_order(self):
         result = parse_specs_from_markdown(SWIFT6_MARKDOWN, SWIFT6_URL)
-        _, sizes, _ = normalize_extraction(result, "ozone")
+        _, sizes, _, _ = normalize_extraction(result, "ozone")
         labels = [s.size_label for s in sizes]
         assert labels == ["XS", "S", "MS", "ML", "L"]
 
     def test_normalize_preserves_spec_values(self):
         """After normalization, spec values must still match ground truth exactly."""
         result = parse_specs_from_markdown(SWIFT6_MARKDOWN, SWIFT6_URL)
-        _, sizes, _ = normalize_extraction(result, "ozone")
+        _, sizes, _, _ = normalize_extraction(result, "ozone")
         for sv in sizes:
             expected = SWIFT6_EXPECTED.get(sv.size_label)
             if expected:
@@ -140,17 +140,17 @@ class TestNormalizeExtraction:
 
     def test_normalize_certs_are_en_b(self):
         result = parse_specs_from_markdown(SWIFT6_MARKDOWN, SWIFT6_URL)
-        _, _, certs = normalize_extraction(result, "ozone")
+        _, _, certs, _ = normalize_extraction(result, "ozone")
         for cert in certs:
             assert cert.standard == CertStandard.EN
             assert cert.classification == "B"
 
     def test_wing_cell_count_preserved(self):
         result = parse_specs_from_markdown(SWIFT6_MARKDOWN, SWIFT6_URL)
-        wing, _, _ = normalize_extraction(result, "ozone")
+        wing, _, _, _ = normalize_extraction(result, "ozone")
         assert wing.cell_count == 62
 
     def test_wing_source_url(self):
         result = parse_specs_from_markdown(SWIFT6_MARKDOWN, SWIFT6_URL)
-        wing, _, _ = normalize_extraction(result, "ozone", source_url=SWIFT6_URL)
+        wing, _, _, _ = normalize_extraction(result, "ozone", source_url=SWIFT6_URL)
         assert wing.manufacturer_url == SWIFT6_URL

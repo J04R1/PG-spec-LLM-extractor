@@ -20,7 +20,7 @@ from src.extractor import extract_specs
 from src.markdown_parser import parse_specs_from_markdown
 from src.normalizer import normalize_extraction, normalize_certification
 from src.db import Database
-from src.models import ExtractionResult, EntityType, Manufacturer
+from src.models import ExtractionResult, Manufacturer
 
 
 # ── Test data ──────────────────────────────────────────────────────────────────
@@ -141,7 +141,7 @@ def test_normalize_and_store() -> bool:
         print("  FAIL: Parser returned None")
         return False
 
-    wing, sizes, certs = normalize_extraction(
+    wing, sizes, certs, perfs = normalize_extraction(
         result, "ozone", is_current=True, source_url=url,
     )
 
@@ -159,7 +159,7 @@ def test_normalize_and_store() -> bool:
         db = Database(db_path)
         db.connect()
 
-        mfr = Manufacturer(name="Ozone", slug="ozone", country="FR", website="https://flyozone.com")
+        mfr = Manufacturer(name="Ozone", slug="ozone", country_code="FR", website="https://flyozone.com")
         mfr_id = db.upsert_manufacturer(mfr)
         model_id = db.upsert_model(wing, mfr_id)
 
@@ -167,14 +167,15 @@ def test_normalize_and_store() -> bool:
             sv_id = db.upsert_size_variant(sv, model_id)
             if i < len(certs):
                 db.insert_certification(certs[i], sv_id)
-            db.record_provenance(EntityType.size_variant, sv_id, url, "ozone")
+
+        db.record_provenance(model_id, url, "ozone")
 
         # Verify
         row = db.conn.execute("SELECT COUNT(*) FROM size_variants").fetchone()
         row_count = row[0]
         cert_row = db.conn.execute("SELECT COUNT(*) FROM certifications").fetchone()
         cert_count = cert_row[0]
-        prov_row = db.conn.execute("SELECT COUNT(*) FROM data_sources").fetchone()
+        prov_row = db.conn.execute("SELECT COUNT(*) FROM provenance").fetchone()
         prov_count = prov_row[0]
 
         db.close()

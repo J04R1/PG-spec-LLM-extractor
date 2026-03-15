@@ -5,9 +5,10 @@ from pydantic import ValidationError
 
 from src.models import (
     CertStandard,
-    EntityType,
     ExtractionResult,
     Manufacturer,
+    PerformanceData,
+    PerformanceSourceType,
     SizeSpec,
     SizeVariant,
     TargetUse,
@@ -89,14 +90,14 @@ class TestEnums:
         assert CertStandard.LTF.value == "LTF"
         assert CertStandard.CCC.value == "CCC"
 
-    def test_entity_type_values(self):
-        assert EntityType.manufacturer.value == "manufacturer"
-        assert EntityType.size_variant.value == "size_variant"
+    def test_performance_source_type_values(self):
+        assert PerformanceSourceType.manufacturer_stated.value == "manufacturer_stated"
+        assert PerformanceSourceType.test_report.value == "test_report"
 
 
 class TestDomainModels:
     def test_manufacturer(self):
-        mfr = Manufacturer(name="Ozone", slug="ozone", country="FR")
+        mfr = Manufacturer(name="Ozone", slug="ozone", country_code="FR")
         assert mfr.name == "Ozone"
         assert mfr.id is None
 
@@ -104,6 +105,8 @@ class TestDomainModels:
         wing = WingModel(name="Swift 6", slug="ozone-swift-6")
         assert wing.is_current is True
         assert wing.manufacturer_id is None
+        assert wing.year_released is None
+        assert wing.year_discontinued is None
 
     def test_size_variant(self):
         sv = SizeVariant(size_label="M", flat_area_m2=24.04)

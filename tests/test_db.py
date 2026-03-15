@@ -8,9 +8,8 @@ from src.db import Database
 from src.models import (
     Certification,
     CertStandard,
-    DataSource,
-    EntityType,
     Manufacturer,
+    Provenance,
     SizeVariant,
     WingModel,
 )
@@ -19,14 +18,18 @@ from conftest import SWIFT6_EXPECTED, assert_spec_field
 
 
 class TestSchemaCreation:
-    def test_all_five_tables_exist(self, tmp_db):
+    def test_all_seven_tables_exist(self, tmp_db):
         tables = {
             row[0]
             for row in tmp_db.conn.execute(
                 "SELECT name FROM sqlite_master WHERE type='table'"
             ).fetchall()
         }
-        expected = {"manufacturers", "models", "size_variants", "certifications", "data_sources"}
+        expected = {
+            "manufacturers", "models", "model_target_uses",
+            "size_variants", "performance_data",
+            "certifications", "provenance",
+        }
         assert expected <= tables
 
     def test_foreign_keys_enabled(self, tmp_db):
@@ -36,7 +39,7 @@ class TestSchemaCreation:
 
 class TestUpsertManufacturer:
     def test_insert_returns_id(self, tmp_db):
-        mfr = Manufacturer(name="Ozone", slug="ozone", country="FR")
+        mfr = Manufacturer(name="Ozone", slug="ozone", country_code="FR")
         mfr_id = tmp_db.upsert_manufacturer(mfr)
         assert isinstance(mfr_id, int)
         assert mfr_id >= 1
@@ -158,16 +161,13 @@ class TestRecordProvenance:
         model_id = tmp_db.upsert_model(
             WingModel(name="Swift 6", slug="ozone-swift-6"), mfr_id
         )
-        sv_id = tmp_db.upsert_size_variant(
-            SizeVariant(size_label="XS"), model_id
-        )
 
         url = "https://flyozone.com/paragliders/products/gliders/swift-6"
-        tmp_db.record_provenance(EntityType.size_variant, sv_id, url, "ozone")
+        tmp_db.record_provenance(model_id, url, "ozone")
 
         row = tmp_db.conn.execute(
-            "SELECT * FROM data_sources WHERE entity_id = ? AND entity_type = ?",
-            (sv_id, "size_variant"),
+            "SELECT * FROM provenance WHERE model_id = ?",
+            (model_id,),
         ).fetchone()
         assert row is not None
         assert row["source_url"] == url

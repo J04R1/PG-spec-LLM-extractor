@@ -2,10 +2,10 @@
 Post-extraction normalization rules.
 
 Transforms raw LLM extraction output into canonical forms matching
-the production database schema. Handles:
+the database schema v2. Handles:
   - Certification normalization (EN-A, LTF B → standard + classification)
   - Size label normalization
-  - Unit normalization (ensure kg, m², m)
+  - Performance data separation (from SizeVariant → PerformanceData)
   - Model slug generation ({manufacturer_slug}-{model_slug})
 """
 
@@ -18,6 +18,7 @@ from .models import (
     Certification,
     CertStandard,
     ExtractionResult,
+    PerformanceData,
     SizeVariant,
     WingModel,
 )
@@ -133,11 +134,11 @@ def normalize_extraction(
     manufacturer_slug: str,
     is_current: bool = True,
     source_url: str | None = None,
-) -> tuple[WingModel, list[SizeVariant], list[Certification]]:
-    """Transform an ExtractionResult into production-aligned domain models.
+) -> tuple[WingModel, list[SizeVariant], list[Certification], list[PerformanceData]]:
+    """Transform an ExtractionResult into domain models (schema v2).
 
     Returns:
-        Tuple of (WingModel, list[SizeVariant], list[Certification])
+        Tuple of (WingModel, list[SizeVariant], list[Certification], list[PerformanceData])
     """
     slug = make_model_slug(manufacturer_slug, result.model_name)
 
@@ -145,8 +146,7 @@ def normalize_extraction(
         name=result.model_name,
         slug=slug,
         category=result.category,
-        target_use=result.target_use,
-        year=result.year,
+        year_released=result.year,
         is_current=is_current,
         cell_count=result.cell_count,
         line_material=result.line_material,
@@ -156,6 +156,7 @@ def normalize_extraction(
 
     sizes: list[SizeVariant] = []
     certs: list[Certification] = []
+    perfs: list[PerformanceData] = []
 
     for size_spec in result.sizes:
         sv = SizeVariant(
@@ -169,10 +170,6 @@ def normalize_extraction(
             wing_weight_kg=size_spec.wing_weight_kg,
             ptv_min_kg=size_spec.ptv_min_kg,
             ptv_max_kg=size_spec.ptv_max_kg,
-            speed_trim_kmh=size_spec.speed_trim_kmh,
-            speed_max_kmh=size_spec.speed_max_kmh,
-            glide_ratio_best=size_spec.glide_ratio_best,
-            min_sink_ms=size_spec.min_sink_ms,
         )
         sizes.append(sv)
 
@@ -186,4 +183,20 @@ def normalize_extraction(
             )
             certs.append(cert)
 
-    return wing, sizes, certs
+        # Extract performance data if any performance fields are present
+        has_perf = any([
+            size_spec.speed_trim_kmh,
+            size_spec.speed_max_kmh,
+            size_spec.glide_ratio_best,
+            size_spec.min_sink_ms,
+        ])
+        if has_perf:
+            perf = PerformanceData(
+                speed_trim_kmh=size_spec.speed_trim_kmh,
+                speed_max_kmh=size_spec.speed_max_kmh,
+                glide_ratio_best=size_spec.glide_ratio_best,
+                min_sink_ms=size_spec.min_sink_ms,
+            )
+            perfs.append(perf)
+
+    return wing, sizes, certs, perfs

@@ -7,10 +7,10 @@ websites using Crawl4AI. Reads YAML config files per manufacturer and outputs
 JSON + CSV in the enrichment format consumed by scripts/import_enrichment_csv.py.
 
 Usage (from tools/spec-extractor/ with venv active):
-    python extract.py --config configs/ozone.yaml          # Full extraction
-    python extract.py --config configs/ozone.yaml --map-only     # URL discovery only
-    python extract.py --config configs/ozone.yaml --retry-failed  # Re-extract failures
-    python extract.py --config configs/ozone.yaml --convert-only  # JSON → CSV only
+    python extract.py --config config/manufacturers/ozone.yaml          # Full extraction
+    python extract.py --config config/manufacturers/ozone.yaml --map-only     # URL discovery only
+    python extract.py --config config/manufacturers/ozone.yaml --retry-failed  # Re-extract failures
+    python extract.py --config config/manufacturers/ozone.yaml --convert-only  # JSON → CSV only
     python extract.py --url https://flyozone.com/.../rush-5       # Single URL test
 
 Requirements (install in isolated venv):
@@ -979,10 +979,10 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python extract.py --config configs/ozone.yaml           # Full extraction
-  python extract.py --config configs/ozone.yaml --map-only      # Discover URLs only
-  python extract.py --config configs/ozone.yaml --retry-failed   # Re-extract failures
-  python extract.py --config configs/ozone.yaml --convert-only   # JSON → CSV only
+  python extract.py --config config/manufacturers/ozone.yaml           # Full extraction
+  python extract.py --config config/manufacturers/ozone.yaml --map-only      # Discover URLs only
+  python extract.py --config config/manufacturers/ozone.yaml --retry-failed   # Re-extract failures
+  python extract.py --config config/manufacturers/ozone.yaml --convert-only   # JSON → CSV only
   python extract.py --url https://flyozone.com/.../rush-5        # Single URL test
 
 Crash recovery:

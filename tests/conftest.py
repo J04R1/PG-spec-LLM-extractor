@@ -285,6 +285,6 @@ def ozone_manufacturer():
     return Manufacturer(
         name="Ozone",
         slug="ozone",
-        country="FR",
+        country_code="FR",
         website="https://flyozone.com",
     )
