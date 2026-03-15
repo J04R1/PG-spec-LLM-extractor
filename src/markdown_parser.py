@@ -66,14 +66,25 @@ _MD_ROW_MAP: dict[str, tuple[str, bool, bool]] = {
     "ar flat":                         ("flat_aspect_ratio",  True,  False),
     "ar proj.":                        ("proj_aspect_ratio",  True,  False),
     "ar proj":                         ("proj_aspect_ratio",  True,  False),
+    # Advance-specific labels
+    "flat surface":                    ("flat_area_m2",       True,  False),
+    "projected surface":               ("proj_area_m2",       True,  False),
+    "certified takeoff weight":        ("_ptv_range",         True,  True),
+    "recommended takeoff weight":      ("_ptv_range",         True,  True),
+    "take-off weight":                 ("_ptv_range",         True,  True),
+    "takeoff weight":                  ("_ptv_range",         True,  True),
+    "span":                            ("flat_span_m",        True,  False),
+    "aspect ratio":                    ("flat_aspect_ratio",  True,  False),
 }
 
 
 _SIZE_LABEL_HINTS = {
     "xs", "s", "ms", "sm", "m", "ml", "l", "xl", "xxl",
     "xxs", "xxxl",
-    "16", "17", "18", "19", "20", "21",
+    "14", "15", "16", "17", "18", "19", "20", "21",
     "22", "23", "24", "25", "26", "27", "28", "29", "30", "31",
+    "32", "33", "34", "35", "36", "37", "38", "39", "40",
+    "41", "42", "43", "44", "45",
 }
 
 
@@ -136,6 +147,7 @@ def _infer_target_use(certs: list[str]) -> TargetUse:
 def parse_specs_from_markdown(
     markdown: str,
     url: str,
+    manufacturer_name: str | None = None,
 ) -> Optional[ExtractionResult]:
     """Parse a pipe-delimited spec table from rendered markdown.
 
@@ -218,7 +230,15 @@ def parse_specs_from_markdown(
     sizes: list[dict] = [{"size_label": sl.strip().upper()} for sl in size_labels]
     model_data: dict = {}
 
+    # Detect unit column: if data rows consistently have one extra value and
+    # the first value looks like a unit string, strip it.
+    _UNIT_PATTERN = re.compile(r"^(m2|m²|m\^2|m|kg|km/?h|%|°|sec|s)?$", re.IGNORECASE)
+
     for label, values in spec_rows:
+        # Strip unit column if present (Advance-style tables)
+        if len(values) == len(sizes) + 1 and _UNIT_PATTERN.match(values[0].strip()):
+            values = values[1:]
+
         label_stripped = re.sub(r"\s*\*\w[\w\s]*$", "", label).strip()
         label_low = _strip_md_formatting(label_stripped).lower().strip()
         label_clean = re.sub(r"\s*\(.*?\)\s*$", "", label_low).strip()
@@ -280,7 +300,8 @@ def parse_specs_from_markdown(
                 and any(c.isalnum() for c in candidate)
             ):
                 rest = " | ".join(parts[1:]).lower()
-                if "ozone" in rest or "paraglider" in rest or "logo" in rest:
+                mfr = manufacturer_name.lower() if manufacturer_name else "ozone"
+                if mfr in rest or "paraglider" in rest or "logo" in rest:
                     model_name = candidate
                     break
 

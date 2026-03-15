@@ -82,31 +82,60 @@ class OllamaAdapter(LLMAdapter):
         schema: dict,
         instructions: str | None = None,
     ) -> str:
-        """Build the extraction prompt with schema and markdown content."""
-        schema_str = json.dumps(schema, indent=2)
+        """Build the extraction prompt with a concrete example for small LLMs.
+
+        Small models (3B) follow concrete examples better than abstract JSON
+        schemas. We provide one complete example rather than the full Pydantic
+        JSON schema.
+        """
+        example = json.dumps({
+            "model_name": "Rush 6",
+            "category": "paraglider",
+            "target_use": "xc",
+            "cell_count": 62,
+            "sizes": [
+                {
+                    "size_label": "S",
+                    "flat_area_m2": 22.54,
+                    "flat_span_m": 11.34,
+                    "flat_aspect_ratio": 5.7,
+                    "proj_area_m2": 19.11,
+                    "proj_span_m": 8.94,
+                    "proj_aspect_ratio": 4.18,
+                    "wing_weight_kg": 4.74,
+                    "ptv_min_kg": 65,
+                    "ptv_max_kg": 85,
+                    "certification": "B"
+                }
+            ]
+        }, indent=2)
+
+        rules = (
+            "RULES:\n"
+            "- Extract ONLY the technical specs table — no marketing text\n"
+            "- model_name: the paraglider model name (e.g. 'Rush 6', 'Moxie')\n"
+            "- sizes: one entry per size column in the specs table\n"
+            "- All numeric values must be plain numbers (no units, no text)\n"
+            "- 'Certified Weight Range' or 'In-Flight Weight Range' 65-85 → "
+            "ptv_min_kg: 65, ptv_max_kg: 85\n"
+            "- 'Glider Weight' or 'Wing Weight' → wing_weight_kg\n"
+            "- 'EN/LTF' or 'Certification' → certification (just the letter: A, B, C, D, or CCC)\n"
+            "- 'Number of Cells' → cell_count (top-level, not per-size)\n"
+            "- If a field is not in the table, omit it\n"
+            "- Return ONLY the JSON object, no other text\n"
+        )
 
         if instructions:
-            # Use manufacturer-specific prompt from YAML config
             return (
                 f"{instructions}\n\n"
-                f"Return a JSON object matching this schema:\n\n"
-                f"```json\n{schema_str}\n```\n\n"
+                f"{rules}\n"
+                f"Example output format:\n```json\n{example}\n```\n\n"
                 f"MARKDOWN CONTENT:\n\n{markdown}"
             )
 
         return (
-            "Extract the paraglider technical specifications from the following "
-            "markdown content. Return a JSON object matching this schema:\n\n"
-            f"```json\n{schema_str}\n```\n\n"
-            "RULES:\n"
-            "- Extract ONLY factual technical data (no marketing text)\n"
-            "- All numeric values must be plain numbers (no units)\n"
-            "- Return one entry per size in the specs table\n"
-            "- If a field is not found, omit it from the output\n"
-            "- 'Certified Weight Range' or 'In-Flight Weight Range' → split into "
-            "ptv_min_kg and ptv_max_kg (e.g. '65-85' → min=65, max=85)\n"
-            "- 'Glider Weight' → wing_weight_kg\n"
-            "- 'Certification' or 'EN/LTF' → certification class letter (A, B, C, D, or CCC)\n"
-            "- 'Number of Cells' → cell_count (top-level, not per-size)\n\n"
+            "Extract the paraglider technical specifications from this page.\n\n"
+            f"{rules}\n"
+            f"Example output format:\n```json\n{example}\n```\n\n"
             f"MARKDOWN CONTENT:\n\n{markdown}"
         )

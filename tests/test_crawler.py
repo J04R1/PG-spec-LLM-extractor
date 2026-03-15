@@ -33,7 +33,7 @@ print(f"3. Deduplication OK: {len(urls)} unique, 'b' upgraded to current")
 # 4. Crawler instantiation
 c = Crawler()
 assert c.rate_limit_ms == 1500
-assert c.user_agent == "OpenPG-SpecExtractor/1.0 (+https://github.com/open-paraglider)"
+assert c.user_agent == "PG-Spec/1.0 ()"
 print("4. Crawler instantiation OK")
 
 # 5. Partial save/load roundtrip

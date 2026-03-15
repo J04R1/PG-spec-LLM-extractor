@@ -1,0 +1,88 @@
+# Advance Paraglider Specs — Extraction Config
+# Used by: src/pipeline.py
+
+manufacturer:
+  name: Advance
+  slug: advance
+  website: https://www.advance.swiss
+
+sources:
+  current_gliders:
+    listing_url: https://www.advance.swiss/en/products/paragliders
+    url_pattern: "/products/paragliders/"
+    is_current: true
+    url_excludes:
+      - "#"
+      - "?"
+      - "sitemap.xml"
+      - "/services/"
+      - "/products/harnesses"
+      - "/products/accessories"
+      - "/products/paragliders\"" # listing page itself
+
+extraction:
+  strategy: markdown
+
+  llm:
+    provider: "ollama"
+
+    prompt: |
+      Extract ONLY the factual technical specifications from this Advance paraglider product page.
+
+      RULES:
+      - Read the technical specs table carefully. Each column is a size (22, 24, 26, 28, 31, etc.)
+      - "Take-off weight" or "In-flight weight range" gives ptv_min_kg and ptv_max_kg (split the range like "65-85" into min=65, max=85)
+      - "Weight" or "Glider weight" gives wing_weight_kg
+      - "Certification" or "EN/LTF" gives the certification class letter (A, B, C, D, or CCC)
+      - "Number of cells" is the cell_count (usually same for all sizes — put it at top level, not per-size)
+      - If line materials are listed, capture them as a single string
+      - For target_use: EN-A wings = "school" or "leisure", EN-B = "leisure" or "xc", EN-C = "xc", EN-D = "competition", CCC = "competition"
+      - For category: use "tandem" only for tandem wings, "paraglider" for everything else
+      - DO NOT extract marketing descriptions, pilot reviews, or any prose text
+      - DO NOT extract image URLs
+      - All numeric values must be plain numbers (no units, no "kg", no "m²")
+      - Return one size entry per column in the specs table
+
+  schema:
+    type: object
+    properties:
+      model_name:
+        type: string
+        description: "Wing model name without manufacturer (e.g. 'ALPHA DLS', 'SIGMA DLS', 'OMEGA ULS')"
+      category:
+        type: string
+        enum: ["paraglider", "tandem", "miniwing", "single_skin", "acro", "speedwing", "paramotor"]
+      target_use:
+        type: string
+        enum: ["school", "leisure", "xc", "competition", "hike_and_fly", "vol_biv", "acro", "tandem"]
+      cell_count:
+        type: integer
+      line_material:
+        type: string
+      sizes:
+        type: array
+        items:
+          type: object
+          properties:
+            size_label:
+              type: string
+            flat_area_m2:
+              type: number
+            flat_span_m:
+              type: number
+            flat_aspect_ratio:
+              type: number
+            proj_area_m2:
+              type: number
+            proj_span_m:
+              type: number
+            proj_aspect_ratio:
+              type: number
+            wing_weight_kg:
+              type: number
+            ptv_min_kg:
+              type: number
+            ptv_max_kg:
+              type: number
+            certification:
+              type: string

@@ -131,5 +131,5 @@ See `documentation/security/DATA_COMPLIANCE_GUIDELINES.md` for full legal and et
 | 04 — Markdown Fallback | ✅ Complete |
 | 05 — Normalization & SQLite | ✅ Complete |
 | 06 — Pipeline Orchestrator & CLI | ✅ Complete |
-| 07 — Ozone Validation Run | ⬜ Not started |
+| 07 — Ozone Validation Run | ✅ Complete (MD parser: 98.1% match, 0 data errors) |
 | 08 — Second Manufacturer & Polish | ⬜ Not started |

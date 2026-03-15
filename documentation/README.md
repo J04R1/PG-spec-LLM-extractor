@@ -15,8 +15,8 @@ Iteration numbers are **global** across all folders (chronological project order
 | 04 | `ITERATION_04_MARKDOWN_FALLBACK.md` | `architecture/` | Deterministic markdown parser, auto-fallback, 43 label mappings, EU decimals | Complete |
 | 05 | `ITERATION_05_NORMALIZATION_SQLITE.md` | `architecture/` | Storage wiring, CSV export, --convert-only, provenance tracking | Complete |
 | 06 | `ITERATION_06_PIPELINE_CLI.md` | `architecture/` | CLI finalization, status command, --retry-failed, full flow wiring | Complete |
-| 07 | `ITERATION_07_OZONE-VALIDATION.md` | `architecture/` | Ozone Validation Run | Not started |
-| 08 | `ITERATION_08_SECOND_MANUFACTURER.md` | `architecture/` | Second Manufacturer & Polish | Not started |
+| 07 | `ITERATION_07_OZONE-VALIDATION.md` | `architecture/` | Ozone Validation Run — 10-model sample, 98.1% field match, 0 data errors | Complete |
+| 08 | `ITERATION_08_SECOND_MANUFACTURER.md` | `architecture/` | Second Manufacturer (Advance) — 8-model sample, 93.9% field match, unit column handling | Complete |
 | 09 | `ITERATION_09_TEST_SUITE.md` | `architecture/` | Pipeline test suite — 129 pytest tests, strict spec assertions, 3 bugs fixed | Complete |
 
 **Next iteration number: 10**

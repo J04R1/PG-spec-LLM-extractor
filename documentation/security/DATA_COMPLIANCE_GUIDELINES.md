@@ -52,7 +52,7 @@ If a path is disallowed, it must not be crawled — no exceptions.
 
 Always use an honest, identifiable User-Agent string:
 ```
-OpenPG-SpecExtractor/1.0 (+https://github.com/open-paraglider)
+PG-Spec/1.0 (+)
 ```
 
 Never use fake or browser-mimicking User-Agent strings for crawling.

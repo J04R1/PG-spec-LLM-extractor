@@ -26,7 +26,7 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-USER_AGENT = "OpenPG-SpecExtractor/1.0 (+https://github.com/open-paraglider)"
+USER_AGENT = "PG-Spec/1.0 ()"
 
 _RATE_LIMIT_INDICATORS = [
     "429", "rate limit", "rate_limit", "quota", "exhausted",
@@ -369,3 +369,33 @@ class Crawler:
             with open(partial_path, "r", encoding="utf-8") as f:
                 return json.load(f)
         return []
+
+    # ── Markdown cache ─────────────────────────────────────────────────────
+
+    @staticmethod
+    def _md_cache_key(url: str) -> str:
+        """Create a filesystem-safe cache key from a URL."""
+        import hashlib
+        return hashlib.sha256(url.encode()).hexdigest()
+
+    @staticmethod
+    def save_markdown_cache(url: str, markdown: str, cache_dir: Path) -> None:
+        """Save rendered markdown to a file-based cache."""
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        key = Crawler._md_cache_key(url)
+        cache_file = cache_dir / f"{key}.md"
+        with open(cache_file, "w", encoding="utf-8") as f:
+            f.write(markdown)
+        logger.debug("Cached markdown for %s → %s", url, cache_file)
+
+    @staticmethod
+    def load_markdown_cache(url: str, cache_dir: Path) -> Optional[str]:
+        """Load cached markdown if available."""
+        key = Crawler._md_cache_key(url)
+        cache_file = cache_dir / f"{key}.md"
+        if cache_file.exists():
+            with open(cache_file, "r", encoding="utf-8") as f:
+                content = f.read()
+            logger.info("Using cached markdown for %s (%d chars)", url, len(content))
+            return content
+        return None
