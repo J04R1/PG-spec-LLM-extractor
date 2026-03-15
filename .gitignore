@@ -9,6 +9,7 @@ venv/
 # scraper artifacts
 data/dhv_cache/
 data/dhv_checkpoint.json
+output/md_cache/
 
 # Output data (generated, not tracked)
 output/*.json
