@@ -162,6 +162,35 @@ class TestBuildCertification:
                "cert_report_url": ""}
         assert _build_certification(row) is None
 
+    def test_normalizes_dhv_to_ltf(self):
+        """DHV standard + numeric class should normalize to LTF."""
+        row = {"cert_standard": "DHV", "cert_classification": "1-2",
+               "cert_test_lab": "", "cert_test_date": "",
+               "cert_report_url": ""}
+        cert = _build_certification(row)
+        assert cert is not None
+        assert cert.standard.value == "LTF"
+        assert cert.classification == "1-2"
+
+    def test_normalizes_en_c(self):
+        """EN + C stays EN/C after normalization."""
+        row = {"cert_standard": "EN", "cert_classification": "C",
+               "cert_test_lab": "", "cert_test_date": "",
+               "cert_report_url": ""}
+        cert = _build_certification(row)
+        assert cert.standard.value == "EN"
+        assert cert.classification == "C"
+
+    def test_normalizes_bare_digit(self):
+        """Bare '2' with no standard should normalize to LTF/2."""
+        row = {"cert_standard": "", "cert_classification": "2",
+               "cert_test_lab": "", "cert_test_date": "",
+               "cert_report_url": ""}
+        cert = _build_certification(row)
+        assert cert is not None
+        assert cert.standard.value == "LTF"
+        assert cert.classification == "2"
+
 
 class TestBuildPerformanceData:
     def test_with_data(self):
@@ -251,5 +280,63 @@ class TestImportEnrichmentCSV:
         try:
             with pytest.raises(FileNotFoundError):
                 import_enrichment_csv(tmp_path / "nope.csv", db)
+        finally:
+            db.close()
+
+    def test_validation_gate_skips_critical(self, tmp_path):
+        """Models with critical validation issues should be skipped."""
+        # ptv_min > ptv_max is a critical issue
+        bad_row = (
+            "ozone,BadWing,2023,paraglider,xc,true,55,,"
+            ",https://flyozone.com/bad,,M,"
+            "25.0,11.2,5.018,21.0,8.5,3.44,4.8,200,50,"  # min=200 > max=50
+            ",,,,EN,B,,,"
+        )
+        csv_path = _write_csv(tmp_path, [bad_row])
+        db = Database(tmp_path / "test.db")
+        db.connect()
+        try:
+            counts = import_enrichment_csv(csv_path, db, validate=True)
+            assert counts["models"] == 0
+            assert counts["skipped"] == 1
+            assert len(counts["skipped_models"]) == 1
+            assert counts["skipped_models"][0].model_name == "BadWing"
+        finally:
+            db.close()
+
+    def test_validation_gate_allows_warnings(self, tmp_path):
+        """Models with only warnings should still be imported."""
+        # Missing year is a warning, not critical
+        warn_row = (
+            "ozone,WarnWing,,paraglider,xc,true,55,,"
+            ",https://flyozone.com/warn,,M,"
+            "25.0,11.2,5.018,21.0,8.5,3.44,4.8,80,100,"
+            ",,,,EN,B,,,"
+        )
+        csv_path = _write_csv(tmp_path, [warn_row])
+        db = Database(tmp_path / "test.db")
+        db.connect()
+        try:
+            counts = import_enrichment_csv(csv_path, db, validate=True)
+            assert counts["models"] == 1
+            assert counts["skipped"] == 0
+        finally:
+            db.close()
+
+    def test_validation_gate_disabled(self, tmp_path):
+        """With validate=False, critical models are still imported."""
+        bad_row = (
+            "ozone,BadWing,2023,paraglider,xc,true,55,,"
+            ",https://flyozone.com/bad,,M,"
+            "25.0,11.2,5.018,21.0,8.5,3.44,4.8,200,50,"
+            ",,,,EN,B,,,"
+        )
+        csv_path = _write_csv(tmp_path, [bad_row])
+        db = Database(tmp_path / "test.db")
+        db.connect()
+        try:
+            counts = import_enrichment_csv(csv_path, db, validate=False)
+            assert counts["models"] == 1
+            assert counts["skipped"] == 0
         finally:
             db.close()

@@ -6,6 +6,16 @@ manufacturer:
   slug: ozone
   website: https://flyozone.com
 
+import:
+  output_db: output/ozone.db
+  csv_files:
+    - path: data/ozone_enrichment.csv
+      method: poc_markdown_parser
+      label: "Base import (111 models from POC)"
+    - path: data/ozone_enrichment_all_by_LLM.csv
+      method: llm_enrichment
+      label: "LLM enrichment (33 models)"
+
 sources:
   previous_gliders:
     listing_url: https://flyozone.com/paragliders/products/previous-gliders

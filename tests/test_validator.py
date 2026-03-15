@@ -75,7 +75,7 @@ def _seed_db(tmp_path: Path, rows: list[str]) -> Path:
     db_path = tmp_path / "test.db"
     db = Database(db_path)
     db.connect()
-    import_enrichment_csv(csv_path, db)
+    import_enrichment_csv(csv_path, db, validate=False)
     db.close()
     return db_path
 
@@ -242,7 +242,28 @@ class TestValidateDatabase:
         assert "proj_gte_flat" in checks
 
     def test_bad_cert_detected(self, tmp_path):
-        db_path = _seed_db(tmp_path, [ROW_BAD_CERT])
+        """Invalid cert classification in DB is flagged by validator.
+
+        Use ROW_CLEAN to seed a valid model, then manually insert a bad cert
+        directly (bypassing normalizer which would strip it).
+        """
+        db_path = _seed_db(tmp_path, [ROW_CLEAN])
+        # Insert invalid cert directly into DB, bypassing normalizer
+        db = Database(db_path)
+        db.connect()
+        # Get the size_variant_id for the first size
+        row = db.conn.execute(
+            "SELECT id FROM size_variants LIMIT 1"
+        ).fetchone()
+        sv_id = row[0]
+        db.conn.execute(
+            "INSERT INTO certifications (size_variant_id, standard, classification) "
+            "VALUES (?, 'EN', 'X')",
+            (sv_id,),
+        )
+        db.conn.commit()
+        db.close()
+
         vlog = validate_database(db_path)
         mv = list(vlog.models.values())[0]
         checks = {i.check for i in mv.issues}

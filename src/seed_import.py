@@ -29,7 +29,8 @@ from .models import (
     WingCategory,
     WingModel,
 )
-from .normalizer import normalize_size_label, make_model_slug
+from .normalizer import normalize_size_label, normalize_certification, make_model_slug
+from .validator import validate_model_data, ModelValidation
 
 logger = logging.getLogger(__name__)
 
@@ -45,11 +46,15 @@ def import_enrichment_csv(
     db: Database,
     *,
     extraction_method: str = "llm_enrichment_csv",
+    validate: bool = True,
 ) -> dict:
     """
     Import an enrichment CSV into the database.
 
-    Returns a summary dict with counts of imported entities.
+    When validate=True (default), each model is validated before storing.
+    Models with critical validation issues are skipped and reported.
+
+    Returns a summary dict with counts and skipped model details.
     """
     csv_path = Path(csv_path)
     if not csv_path.exists():
@@ -57,7 +62,8 @@ def import_enrichment_csv(
 
     rows = _read_csv(csv_path)
     if not rows:
-        return {"manufacturers": 0, "models": 0, "sizes": 0, "certifications": 0}
+        return {"manufacturers": 0, "models": 0, "sizes": 0, "certifications": 0,
+                "skipped": 0, "skipped_models": []}
 
     # Group rows by (manufacturer_slug, model_name) → list of size rows
     grouped: dict[tuple[str, str], list[dict]] = {}
@@ -76,8 +82,36 @@ def import_enrichment_csv(
     size_count = 0
     cert_count = 0
     perf_count = 0
+    skipped: list[ModelValidation] = []
 
     for (mfr_slug, model_name), size_rows in grouped.items():
+        # Build all data for this model first (before storing)
+        first = size_rows[0]
+        wing = _build_wing_model(first, mfr_slug)
+
+        sizes = []
+        certs = []
+        perfs = []
+        for row in size_rows:
+            sv = _build_size_variant(row)
+            if sv:
+                sizes.append(sv)
+                cert = _build_certification(row)
+                if cert:
+                    certs.append(cert)
+                perf = _build_performance_data(row)
+                if perf:
+                    perfs.append(perf)
+
+        # Validation gate: check before storing
+        if validate:
+            mv = validate_model_data(wing, sizes, certs, mfr_slug)
+            if mv.has_critical:
+                logger.info("Skipping %s: %d critical issues", model_name,
+                            sum(1 for i in mv.issues if i.severity.value == "critical"))
+                skipped.append(mv)
+                continue
+
         # Ensure manufacturer exists
         if mfr_slug not in mfr_ids:
             mfr = Manufacturer(
@@ -87,10 +121,6 @@ def import_enrichment_csv(
             mfr_ids[mfr_slug] = db.upsert_manufacturer(mfr)
 
         mfr_id = mfr_ids[mfr_slug]
-
-        # Build WingModel from first row (model-level fields are the same)
-        first = size_rows[0]
-        wing = _build_wing_model(first, mfr_slug)
         model_id = db.upsert_model(wing, mfr_id)
         model_count += 1
 
@@ -115,22 +145,18 @@ def import_enrichment_csv(
             model_id,
         )
 
-        # Insert each size row
-        for row in size_rows:
-            sv = _build_size_variant(row)
-            if not sv:
-                continue
+        # Insert each size
+        for i, sv in enumerate(sizes):
             sv_id = db.upsert_size_variant(sv, model_id)
             size_count += 1
 
-            cert = _build_certification(row)
-            if cert:
-                db.insert_certification(cert, sv_id)
+            if i < len(certs):
+                db.delete_certifications_for_size(sv_id)
+                db.insert_certification(certs[i], sv_id)
                 cert_count += 1
 
-            perf = _build_performance_data(row)
-            if perf:
-                db.insert_performance_data(perf, sv_id)
+            if i < len(perfs):
+                db.insert_performance_data(perfs[i], sv_id)
                 perf_count += 1
 
     return {
@@ -139,6 +165,8 @@ def import_enrichment_csv(
         "sizes": size_count,
         "certifications": cert_count,
         "performance_records": perf_count,
+        "skipped": len(skipped),
+        "skipped_models": skipped,
     }
 
 
@@ -241,22 +269,23 @@ def _build_size_variant(row: dict) -> Optional[SizeVariant]:
 
 
 def _build_certification(row: dict) -> Optional[Certification]:
-    """Build a Certification from a CSV row, if cert data present."""
+    """Build a Certification from a CSV row, if cert data present.
+
+    Normalizes the cert string via normalize_certification() to ensure
+    correct standard/classification mapping (e.g., DHV 2 → LTF/2).
+    """
     standard_str = row.get("cert_standard", "").strip()
     classification = row.get("cert_classification", "").strip()
     if not standard_str and not classification:
         return None
 
-    standard = None
-    if standard_str:
-        try:
-            standard = CertStandard(standard_str)
-        except ValueError:
-            standard = CertStandard.other
+    # Normalize: combine standard + classification and parse
+    raw_cert = f"{standard_str} {classification}".strip()
+    standard, normalized_class = normalize_certification(raw_cert)
 
     return Certification(
         standard=standard,
-        classification=classification or None,
+        classification=normalized_class or None,
         test_lab=row.get("cert_test_lab", "").strip() or None,
         report_url=row.get("cert_report_url", "").strip() or None,
         test_date=_parse_date(row.get("cert_test_date", "")),

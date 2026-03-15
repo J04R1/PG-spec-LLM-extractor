@@ -6,6 +6,13 @@ manufacturer:
   slug: advance
   website: https://www.advance.swiss
 
+import:
+  output_db: output/advance.db
+  csv_files:
+    - path: data/advance_enrichment_all_by_LLM.csv
+      method: llm_enrichment
+      label: "LLM enrichment (27 models)"
+
 sources:
   current_gliders:
     listing_url: https://www.advance.swiss/en/products/paragliders

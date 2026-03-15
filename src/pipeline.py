@@ -37,6 +37,7 @@ from .validator import (
     format_model_issues,
     format_validation_summary,
     validate_database,
+    validate_model_data,
 )
 
 load_dotenv()
@@ -207,8 +208,168 @@ def seed(
 
     typer.echo(f"Imported from {csv_p.name}:")
     for key, val in counts.items():
+        if key == "skipped_models":
+            continue  # printed separately below
         typer.echo(f"  {key}: {val}")
     typer.echo(f"Database: {db_path}")
+
+    # Show skipped models
+    skipped_models = counts.get("skipped_models", [])
+    if skipped_models:
+        typer.echo(f"\n⚠ {len(skipped_models)} model(s) skipped (critical issues):")
+        for mv in skipped_models:
+            crits = [i for i in mv.issues if i.severity.value == "critical"]
+            typer.echo(f"  ✗ {mv.model_name}: {', '.join(i.check for i in crits)}")
+
+
+@app.command()
+def rebuild(
+    config: str = typer.Option(..., "--config", "-c", help="Manufacturer config YAML"),
+    resume: bool = typer.Option(False, "--resume", help="Resume from last completed step"),
+    fresh: bool = typer.Option(False, "--fresh", help="Delete DB and start from scratch"),
+) -> None:
+    """Rebuild a manufacturer DB from CSVs with validation gate.
+
+    Reads csv_files from the config, imports each in order, validates,
+    and writes a validation log. Resumable after interruption.
+
+    Usage:
+        python -m src.pipeline rebuild -c config/manufacturers/ozone.yaml
+        python -m src.pipeline rebuild -c config/manufacturers/ozone.yaml --resume
+        python -m src.pipeline rebuild -c config/manufacturers/ozone.yaml --fresh
+    """
+    cfg = load_config(config)
+    mfr = cfg.get("manufacturer", {})
+    mfr_slug = mfr.get("slug", "unknown")
+    mfr_name = mfr.get("name", mfr_slug.title())
+    import_cfg = cfg.get("import", {})
+
+    db_path = import_cfg.get("output_db", f"output/{mfr_slug}.db")
+    csv_files = import_cfg.get("csv_files", [])
+
+    if not csv_files:
+        typer.echo("ERROR: No csv_files defined in config import section.", err=True)
+        raise typer.Exit(1)
+
+    db_p = Path(db_path)
+    progress_path = db_p.with_suffix(".rebuild.json")
+
+    # Load or create progress
+    progress: dict = {"manufacturer": mfr_slug, "steps": {}}
+    if resume and progress_path.exists():
+        progress = json.loads(progress_path.read_text(encoding="utf-8"))
+        typer.echo(f"Resuming rebuild for {mfr_name}...")
+    elif fresh or not resume:
+        # Fresh start — delete existing DB and progress
+        if db_p.exists():
+            db_p.unlink()
+            typer.echo(f"Deleted {db_p}")
+        log_path = db_p.with_suffix(".validation.json")
+        if log_path.exists():
+            log_path.unlink()
+        if progress_path.exists():
+            progress_path.unlink()
+
+    typer.echo(f"\n── Rebuild: {mfr_name} ──")
+
+    total_models = 0
+    total_sizes = 0
+    all_skipped: list = []
+
+    # ── Import steps ───────────────────────────────────────────────────
+    for i, csv_entry in enumerate(csv_files, 1):
+        csv_path_str = csv_entry.get("path", "")
+        method = csv_entry.get("method", "enrichment_csv")
+        label = csv_entry.get("label", csv_path_str)
+        step_key = f"import_{i}"
+
+        if progress.get("steps", {}).get(step_key) == "done":
+            typer.echo(f"\nStep {i}/{len(csv_files) + 1}: {label} (already done — skipping)")
+            continue
+
+        csv_p = Path(csv_path_str)
+        if not csv_p.exists():
+            typer.echo(f"\nStep {i}/{len(csv_files) + 1}: {label}")
+            typer.echo(f"  ⚠ CSV not found: {csv_p} — skipping")
+            progress.setdefault("steps", {})[step_key] = "skipped"
+            _save_progress(progress_path, progress)
+            continue
+
+        typer.echo(f"\nStep {i}/{len(csv_files) + 1}: {label}")
+
+        db = Database(db_path)
+        db.connect()
+        try:
+            counts = import_enrichment_csv(
+                csv_p, db, extraction_method=method, validate=True,
+            )
+        finally:
+            db.close()
+
+        models = counts.get("models", 0)
+        sizes = counts.get("sizes", 0)
+        skipped = counts.get("skipped", 0)
+        skipped_models = counts.get("skipped_models", [])
+
+        total_models += models
+        total_sizes += sizes
+        all_skipped.extend(skipped_models)
+
+        typer.echo(f"  Imported: {models} models, {sizes} sizes")
+        if skipped > 0:
+            typer.echo(f"  Skipped:  {skipped} models (critical issues)")
+            for mv in skipped_models:
+                crits = [iss for iss in mv.issues if iss.severity.value == "critical"]
+                typer.echo(f"    ✗ {mv.model_name}: {', '.join(iss.check for iss in crits)}")
+
+        progress.setdefault("steps", {})[step_key] = "done"
+        _save_progress(progress_path, progress)
+
+    # ── Validation step ────────────────────────────────────────────────
+    validate_step = "validate"
+    if progress.get("steps", {}).get(validate_step) != "done":
+        typer.echo(f"\nStep {len(csv_files) + 1}/{len(csv_files) + 1}: Post-import validation")
+
+        if db_p.exists():
+            vlog = validate_database(db_p)
+
+            s = vlog.summary()
+            typer.echo(f"  ✓ Clean:    {s['clean']} models")
+            typer.echo(f"  △ Warnings: {s['with_issues']} models")
+            typer.echo(f"  ✗ Critical: {s['critical']} models")
+
+            # Add skipped models to the validation log
+            for mv in all_skipped:
+                mv.action = Action.pending
+                vlog.models[mv.model_slug] = mv
+            vlog.save()
+        else:
+            typer.echo("  ⚠ No DB found — skipping validation")
+
+        progress.setdefault("steps", {})[validate_step] = "done"
+        _save_progress(progress_path, progress)
+    else:
+        typer.echo(f"\nStep {len(csv_files) + 1}/{len(csv_files) + 1}: Post-import validation (already done)")
+
+    # ── Summary ────────────────────────────────────────────────────────
+    typer.echo(f"\n── Summary ──")
+    typer.echo(f"  Database: {db_path}")
+    typer.echo(f"  Models stored: {total_models}")
+    typer.echo(f"  Models skipped: {len(all_skipped)}")
+    if all_skipped:
+        typer.echo(f"\n  Fix skipped models with:")
+        typer.echo(f"    python -m src.pipeline fix --db {db_path}")
+
+    # Clean up progress file on success
+    if progress_path.exists():
+        progress_path.unlink()
+
+
+def _save_progress(path: Path, progress: dict) -> None:
+    """Save rebuild progress to disk."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(progress, f, indent=2)
 
 
 @app.command()
@@ -338,14 +499,58 @@ def fix(
             typer.echo("No models pending review in validation log.")
             raise typer.Exit(0)
 
-        # Show list and let user pick
-        typer.echo(f"{len(pending)} model(s) with issues:\n")
-        for i, mv in enumerate(pending[:20], 1):
-            sev = mv.score
-            typer.echo(f"  {i:2d}. {sev} {mv.model_name} — {len(mv.issues)} issues")
+        # Derive manufacturer context from first pending model
+        mfr_slug = pending[0].manufacturer_slug
+        mfr_name = mfr_slug.title()
 
-        if len(pending) > 20:
-            typer.echo(f"  ... and {len(pending) - 20} more")
+        # Collect missing fields across all pending models
+        missing_fields: dict[str, int] = {}
+        for mv in pending:
+            for issue in mv.issues:
+                if issue.check.startswith("missing_") or issue.check == "no_certifications":
+                    missing_fields[issue.check] = missing_fields.get(issue.check, 0) + 1
+
+        # Print prompt header
+        csv_header = (
+            "manufacturer_slug,name,year,category,target_use,is_current,cell_count,"
+            "line_material,riser_config,manufacturer_url,description,size_label,"
+            "flat_area_m2,flat_span_m,flat_aspect_ratio,proj_area_m2,proj_span_m,"
+            "proj_aspect_ratio,wing_weight_kg,ptv_min_kg,ptv_max_kg,"
+            "speed_trim_kmh,speed_max_kmh,glide_ratio_best,min_sink_ms,"
+            "cert_standard,cert_classification,cert_test_lab,cert_test_date,cert_report_url"
+        )
+        typer.echo(f"── {mfr_name} — {len(pending)} models need data ──\n")
+        typer.echo("Most common missing data:")
+        for check, count in sorted(missing_fields.items(), key=lambda x: -x[1]):
+            typer.echo(f"  {check}: {count} models")
+
+        typer.echo(f"\nCSV format (one row per size per model):")
+        typer.echo(csv_header)
+        typer.echo(f"\nExample row:")
+        typer.echo(f"{mfr_slug},Rush 6,2023,paraglider,xc,false,55,,3-liner,"
+                   f"https://example.com/rush-6,,M,25.0,11.2,5.02,21.5,8.8,3.6,"
+                   f"4.8,80,100,38,52,10.2,1.05,EN,B,,,")
+
+        typer.echo(f"\nTo import format needed: <file.csv>")
+
+        # Show list and let user pick
+        typer.echo(f"\n{'─' * 60}\n")
+        for i, mv in enumerate(pending, 1):
+            sev = mv.score
+            # Group issues by check name for compact display
+            checks: dict[str, list[str]] = {}
+            for issue in mv.issues:
+                label = issue.size_label or ""
+                checks.setdefault(issue.check, []).append(label)
+            parts = []
+            for check, labels in checks.items():
+                sized = [l for l in labels if l]
+                if sized:
+                    parts.append(f"{check} ({', '.join(sized)})")
+                else:
+                    parts.append(check)
+            detail = "; ".join(parts)
+            typer.echo(f"  {i:2d}. {sev} {mv.model_name} — {detail}")
 
         choice = typer.prompt("\nPick a number (or q to quit)", default="1")
         if choice.strip().lower() == "q":
@@ -444,7 +649,18 @@ def fix(
         typer.echo("\n── Changes ──")
         _print_diff(old_data, new_data)
 
-    # ── Step 5: Confirm ────────────────────────────────────────────────
+    # ── Step 5: Validate new data ───────────────────────────────────
+    new_mv = validate_model_data(wing, sizes, certs, mfr_slug)
+    if new_mv.issues:
+        typer.echo("\n── Validation of new data ──")
+        for iss in new_mv.issues:
+            sev = {"critical": "✗", "warning": "△", "info": "·"}[iss.severity.value]
+            ctx = f" [{iss.size_label}]" if iss.size_label else ""
+            typer.echo(f"  {sev} {iss.message}{ctx}")
+        if new_mv.has_critical:
+            typer.echo("\n⚠ New data has critical issues.")
+
+    # ── Step 6: Confirm ────────────────────────────────────────────────
     choice = typer.prompt("\nCommit to DB? [y]es / [n]o / [j]son", default="n")
     choice = choice.strip().lower()
 

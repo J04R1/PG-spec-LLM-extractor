@@ -22,6 +22,7 @@ Iteration numbers are **global** across all folders (chronological project order
 | 11 | `ITERATION_11_SEED_IMPORT_BENCHMARK.md` | `data/` | Seed import + benchmark — CSV import, 3-axis scoring (completeness/quality/accuracy), 60 models baseline | Complete |
 | 12 | `ITERATION_12_DATA_VALIDATOR.md` | `data/` | Data validator — per-model issue detection, interactive action prompts, persistent log with resume | Complete |
 | 13 | `ITERATION_13_FIX_FLOW_CERTIFICATIONS.md` | `data/` | Fix command — interactive re-extract with preview, cert normalization preserves original labels, dedup fix | Complete |
+| 14 | `ITERATION_14_VALIDATED_IMPORT_PIPELINE.md` | `data/` | Validated import pipeline — validation gate at import, per-manufacturer DBs, resumable rebuild command | In Progress |
 
 **Next iteration number: 13**
 

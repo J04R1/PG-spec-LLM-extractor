@@ -25,6 +25,10 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .models import Certification, CertStandard, SizeVariant, WingCategory, WingModel
 
 logger = logging.getLogger(__name__)
 
@@ -263,20 +267,104 @@ def validate_database(db_path: str | Path) -> ValidationLog:
 
 
 def _validate_model(conn: sqlite3.Connection, model: sqlite3.Row) -> ModelValidation:
-    """Run all checks on a single model."""
-    mv = ModelValidation(
-        model_id=model["id"],
-        model_slug=model["slug"],
-        model_name=model["name"],
-        manufacturer_slug=model["mfr_slug"],
+    """Run all checks on a single model (DB version — delegates to validate_model_data)."""
+    from .models import Certification as CertModel, SizeVariant, WingModel, WingCategory, CertStandard
+
+    # Build in-memory model objects from DB rows
+    wing = WingModel(
+        name=model["name"],
+        slug=model["slug"],
+        category=WingCategory(model["category"]) if model["category"] else None,
+        year_released=model["year_released"],
+        year_discontinued=model["year_discontinued"],
+        is_current=bool(model["is_current"]),
+        cell_count=model["cell_count"],
+        cell_count_closed=model["cell_count_closed"] if "cell_count_closed" in model.keys() else None,
+        riser_config=model["riser_config"],
         manufacturer_url=model["manufacturer_url"],
+    )
+
+    sizes_rows = conn.execute(
+        "SELECT * FROM size_variants WHERE model_id = ?",
+        (model["id"],),
+    ).fetchall()
+
+    sizes = []
+    for sr in sizes_rows:
+        sizes.append(SizeVariant(
+            size_label=sr["size_label"],
+            flat_area_m2=sr["flat_area_m2"],
+            flat_span_m=sr["flat_span_m"],
+            flat_aspect_ratio=sr["flat_aspect_ratio"],
+            proj_area_m2=sr["proj_area_m2"],
+            proj_span_m=sr["proj_span_m"],
+            proj_aspect_ratio=sr["proj_aspect_ratio"],
+            wing_weight_kg=sr["wing_weight_kg"],
+            ptv_min_kg=sr["ptv_min_kg"],
+            ptv_max_kg=sr["ptv_max_kg"],
+        ))
+
+    cert_rows = conn.execute("""
+        SELECT c.*, sv.size_label
+        FROM certifications c
+        JOIN size_variants sv ON c.size_variant_id = sv.id
+        WHERE sv.model_id = ?
+    """, (model["id"],)).fetchall()
+
+    certs = []
+    cert_size_labels = []
+    for cr in cert_rows:
+        certs.append(CertModel(
+            standard=CertStandard(cr["standard"]) if cr["standard"] else None,
+            classification=cr["classification"],
+        ))
+        cert_size_labels.append(cr["size_label"])
+
+    return validate_model_data(
+        wing, sizes, certs,
+        manufacturer_slug=model["mfr_slug"],
+        model_id=model["id"],
+        cert_size_labels=cert_size_labels,
+    )
+
+
+# ── Valid certification classifications ────────────────────────────────────────
+
+_VALID_CLASSES = {
+    "EN": {"A", "B", "C", "D"},
+    "LTF": {"A", "B", "C", "D", "1", "1-2", "2", "2-3", "3"},
+    "AFNOR": {"Standard", "Performance", "Competition"},
+}
+
+
+def validate_model_data(
+    model: WingModel,
+    sizes: list[SizeVariant],
+    certs: list[Certification],
+    manufacturer_slug: str,
+    model_id: int = 0,
+    cert_size_labels: list[str] | None = None,
+) -> ModelValidation:
+    """Validate model data in-memory (no DB dependency).
+
+    Can be called both during import (pre-storage gate) and for DB validation.
+    cert_size_labels maps each cert to its size label (parallel with certs list).
+    If not provided, certs are matched to sizes by index.
+    """
+    mv = ModelValidation(
+        model_id=model_id,
+        model_slug=model.slug,
+        model_name=model.name,
+        manufacturer_slug=manufacturer_slug,
+        manufacturer_url=model.manufacturer_url,
     )
 
     # ── Model-level checks ─────────────────────────────────────────────
 
     # Missing critical fields
-    for field_name in _CRITICAL_MODEL_FIELDS:
-        if model[field_name] is None:
+    _CRITICAL_ATTRS = {"category": "category", "cell_count": "cell_count", "manufacturer_url": "manufacturer_url"}
+    for field_name, attr in _CRITICAL_ATTRS.items():
+        if getattr(model, attr, None) is None:
             mv.issues.append(ModelIssue(
                 check=f"missing_{field_name}",
                 severity=Severity.warning,
@@ -285,7 +373,7 @@ def _validate_model(conn: sqlite3.Connection, model: sqlite3.Row) -> ModelValida
             ))
 
     # Year released missing
-    if model["year_released"] is None:
+    if model.year_released is None:
         mv.issues.append(ModelIssue(
             check="missing_year_released",
             severity=Severity.warning,
@@ -294,29 +382,29 @@ def _validate_model(conn: sqlite3.Connection, model: sqlite3.Row) -> ModelValida
         ))
 
     # Year plausibility
-    if model["year_released"] is not None:
+    if model.year_released is not None:
         lo, hi = PLAUSIBILITY["year_released"]
-        if not (lo <= model["year_released"] <= hi):
+        if not (lo <= model.year_released <= hi):
             mv.issues.append(ModelIssue(
                 check="implausible_year_released",
                 severity=Severity.critical,
-                message=f"year_released={model['year_released']} outside {lo}–{hi}",
+                message=f"year_released={model.year_released} outside {lo}–{hi}",
                 field="year_released",
             ))
 
     # Cell count plausibility
-    if model["cell_count"] is not None:
+    if model.cell_count is not None:
         lo, hi = PLAUSIBILITY["cell_count"]
-        if not (lo <= model["cell_count"] <= hi):
+        if not (lo <= model.cell_count <= hi):
             mv.issues.append(ModelIssue(
                 check="implausible_cell_count",
                 severity=Severity.warning,
-                message=f"cell_count={model['cell_count']} outside {lo}–{hi}",
+                message=f"cell_count={model.cell_count} outside {lo}–{hi}",
                 field="cell_count",
             ))
 
     # Discontinued without year
-    if model["is_current"] == 0 and model["year_discontinued"] is None:
+    if not model.is_current and model.year_discontinued is None:
         mv.issues.append(ModelIssue(
             check="discontinued_no_year",
             severity=Severity.info,
@@ -326,10 +414,6 @@ def _validate_model(conn: sqlite3.Connection, model: sqlite3.Row) -> ModelValida
 
     # ── Size-level checks ──────────────────────────────────────────────
 
-    sizes = conn.execute(
-        "SELECT * FROM size_variants WHERE model_id = ?",
-        (model["id"],),
-    ).fetchall()
     mv.size_count = len(sizes)
 
     if not sizes:
@@ -341,11 +425,11 @@ def _validate_model(conn: sqlite3.Connection, model: sqlite3.Row) -> ModelValida
         return mv
 
     for size in sizes:
-        label = size["size_label"]
+        label = size.size_label
 
         # Missing critical size fields
         for field_name in _CRITICAL_SIZE_FIELDS:
-            if size[field_name] is None:
+            if getattr(size, field_name, None) is None:
                 mv.issues.append(ModelIssue(
                     check=f"missing_{field_name}",
                     severity=Severity.warning,
@@ -355,20 +439,20 @@ def _validate_model(conn: sqlite3.Connection, model: sqlite3.Row) -> ModelValida
                 ))
 
         # PTV consistency
-        if size["ptv_min_kg"] is not None and size["ptv_max_kg"] is not None:
-            if size["ptv_min_kg"] >= size["ptv_max_kg"]:
+        if size.ptv_min_kg is not None and size.ptv_max_kg is not None:
+            if size.ptv_min_kg >= size.ptv_max_kg:
                 mv.issues.append(ModelIssue(
                     check="ptv_min_gte_max",
                     severity=Severity.critical,
-                    message=f"Size {label}: ptv_min={size['ptv_min_kg']} >= ptv_max={size['ptv_max_kg']}",
+                    message=f"Size {label}: ptv_min={size.ptv_min_kg} >= ptv_max={size.ptv_max_kg}",
                     field="ptv_min_kg",
                     size_label=label,
                 ))
 
         # Geometry consistency: flat_area ≈ span²/AR
-        area = size["flat_area_m2"]
-        span = size["flat_span_m"]
-        ar = size["flat_aspect_ratio"]
+        area = size.flat_area_m2
+        span = size.flat_span_m
+        ar = size.flat_aspect_ratio
         if area and span and ar and ar > 0:
             computed = (span ** 2) / ar
             if abs(computed - area) / area > 0.05:
@@ -381,12 +465,12 @@ def _validate_model(conn: sqlite3.Connection, model: sqlite3.Row) -> ModelValida
                 ))
 
         # Projected < flat
-        if size["proj_area_m2"] and size["flat_area_m2"]:
-            if size["proj_area_m2"] >= size["flat_area_m2"]:
+        if size.proj_area_m2 and size.flat_area_m2:
+            if size.proj_area_m2 >= size.flat_area_m2:
                 mv.issues.append(ModelIssue(
                     check="proj_gte_flat",
                     severity=Severity.critical,
-                    message=f"Size {label}: proj_area={size['proj_area_m2']} >= flat_area={size['flat_area_m2']}",
+                    message=f"Size {label}: proj_area={size.proj_area_m2} >= flat_area={size.flat_area_m2}",
                     field="proj_area_m2",
                     size_label=label,
                 ))
@@ -395,10 +479,7 @@ def _validate_model(conn: sqlite3.Connection, model: sqlite3.Row) -> ModelValida
         for field_name, (lo, hi) in PLAUSIBILITY.items():
             if field_name in ("cell_count", "year_released"):
                 continue  # checked at model level
-            try:
-                val = size[field_name]
-            except IndexError:
-                continue
+            val = getattr(size, field_name, None)
             if val is not None and not (lo <= val <= hi):
                 mv.issues.append(ModelIssue(
                     check=f"implausible_{field_name}",
@@ -410,13 +491,6 @@ def _validate_model(conn: sqlite3.Connection, model: sqlite3.Row) -> ModelValida
 
     # ── Certification checks ───────────────────────────────────────────
 
-    certs = conn.execute("""
-        SELECT c.*, sv.size_label
-        FROM certifications c
-        JOIN size_variants sv ON c.size_variant_id = sv.id
-        WHERE sv.model_id = ?
-    """, (model["id"],)).fetchall()
-
     if not certs:
         mv.issues.append(ModelIssue(
             check="no_certifications",
@@ -424,22 +498,25 @@ def _validate_model(conn: sqlite3.Connection, model: sqlite3.Row) -> ModelValida
             message="No certification records",
         ))
 
-    _VALID_CLASSES = {
-        "EN": {"A", "B", "C", "D"},
-        "LTF": {"A", "B", "C", "D", "1", "1-2", "2", "2-3", "3"},
-        "AFNOR": {"Standard", "Performance", "Competition"},
-    }
-    for cert in certs:
-        std = cert["standard"]
-        cls = cert["classification"]
+    # Build size labels for certs (by index if not explicitly provided)
+    if cert_size_labels is None:
+        cert_size_labels = [
+            sizes[i].size_label if i < len(sizes) else "?"
+            for i in range(len(certs))
+        ]
+
+    for i, cert in enumerate(certs):
+        std = cert.standard.value if cert.standard else None
+        cls = cert.classification
+        size_lbl = cert_size_labels[i] if i < len(cert_size_labels) else "?"
         if std in _VALID_CLASSES and cls:
             if cls not in _VALID_CLASSES[std]:
                 mv.issues.append(ModelIssue(
                     check=f"invalid_{std.lower()}_classification",
                     severity=Severity.critical,
-                    message=f"Size {cert['size_label']}: {std}/{cls} — expected {'/'.join(sorted(_VALID_CLASSES[std]))}",
+                    message=f"Size {size_lbl}: {std}/{cls} — expected {'/'.join(sorted(_VALID_CLASSES[std]))}",
                     field="classification",
-                    size_label=cert["size_label"],
+                    size_label=size_lbl,
                 ))
 
     return mv
