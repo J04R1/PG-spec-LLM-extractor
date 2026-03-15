@@ -41,14 +41,16 @@ class TestCertificationNormalization:
         assert cls == "CCC"
 
     def test_dhv_1_2(self):
+        """DHV 1-2 → LTF standard, classification preserved as '1-2'."""
         std, cls = normalize_certification("DHV 1-2")
         assert std == CertStandard.LTF
-        assert cls == "B"
+        assert cls == "1-2"
 
     def test_dhv_1(self):
+        """DHV 1 → LTF standard, classification preserved as '1'."""
         std, cls = normalize_certification("DHV 1")
         assert std == CertStandard.LTF
-        assert cls == "A"
+        assert cls == "1"
 
     def test_bare_letter_b(self):
         std, cls = normalize_certification("B")
@@ -69,6 +71,49 @@ class TestCertificationNormalization:
         std, cls = normalize_certification("EN D")
         assert std == CertStandard.EN
         assert cls == "D"
+
+    def test_bare_digit_2(self):
+        """Bare '2' from old DHV/LTF numbering — preserved as LTF/2."""
+        std, cls = normalize_certification("2")
+        assert std == CertStandard.LTF
+        assert cls == "2"
+
+    def test_bare_digit_1(self):
+        std, cls = normalize_certification("1")
+        assert std == CertStandard.LTF
+        assert cls == "1"
+
+    def test_bare_digit_1_2(self):
+        std, cls = normalize_certification("1-2")
+        assert std == CertStandard.LTF
+        assert cls == "1-2"
+
+    def test_bare_digit_2_3(self):
+        std, cls = normalize_certification("2-3")
+        assert std == CertStandard.LTF
+        assert cls == "2-3"
+
+    def test_bare_digit_3(self):
+        std, cls = normalize_certification("3")
+        assert std == CertStandard.LTF
+        assert cls == "3"
+
+    def test_ltf_numeric_2(self):
+        """LTF with numeric class (e.g. 'LTF 2') — preserved as-is."""
+        std, cls = normalize_certification("LTF 2")
+        assert std == CertStandard.LTF
+        assert cls == "2"
+
+    def test_ltf_numeric_1_2(self):
+        std, cls = normalize_certification("LTF 1-2")
+        assert std == CertStandard.LTF
+        assert cls == "1-2"
+
+    def test_ltf_letter_b(self):
+        """LTF with letter class still works."""
+        std, cls = normalize_certification("LTF B")
+        assert std == CertStandard.LTF
+        assert cls == "B"
 
 
 class TestSizeLabelNormalization:

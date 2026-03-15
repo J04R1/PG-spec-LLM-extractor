@@ -53,7 +53,6 @@ CREATE TABLE IF NOT EXISTS models (
     is_current        INTEGER DEFAULT 1,
     cell_count        INTEGER,
     cell_count_closed INTEGER,
-    line_material     TEXT,
     riser_config      TEXT,
     manufacturer_url  TEXT,
     created_at        TEXT    DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
@@ -178,19 +177,46 @@ class Database:
         return cur.lastrowid  # type: ignore[return-value]
 
     def upsert_model(self, model: WingModel, manufacturer_id: int) -> int:
-        """Insert or find existing model by slug. Returns id."""
+        """Insert or update model by slug. Fills NULL fields from new data. Returns id."""
         row = self.conn.execute(
-            "SELECT id FROM models WHERE slug = ?", (model.slug,)
+            "SELECT * FROM models WHERE slug = ?", (model.slug,)
         ).fetchone()
         if row:
+            # Update NULL fields with new non-NULL values
+            updates: list[str] = []
+            values: list = []
+            fill_fields = {
+                "year_released": model.year_released,
+                "year_discontinued": model.year_discontinued,
+                "cell_count": model.cell_count,
+                "cell_count_closed": model.cell_count_closed,
+                "riser_config": model.riser_config,
+                "manufacturer_url": model.manufacturer_url,
+            }
+            for col, new_val in fill_fields.items():
+                if row[col] is None and new_val is not None:
+                    updates.append(f"{col} = ?")
+                    values.append(new_val)
+            # is_current: upgrade from 0→1 if new data says current
+            if row["is_current"] == 0 and model.is_current:
+                updates.append("is_current = ?")
+                values.append(1)
+            if updates:
+                updates.append("updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')")
+                values.append(row["id"])
+                self.conn.execute(
+                    f"UPDATE models SET {', '.join(updates)} WHERE id = ?",
+                    values,
+                )
+                self.conn.commit()
             return row["id"]
 
         cur = self.conn.execute(
             """INSERT INTO models
             (manufacturer_id, name, slug, category, year_released,
              year_discontinued, is_current, cell_count, cell_count_closed,
-             line_material, riser_config, manufacturer_url)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+             riser_config, manufacturer_url)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 manufacturer_id,
                 model.name,
@@ -201,7 +227,6 @@ class Database:
                 1 if model.is_current else 0,
                 model.cell_count,
                 model.cell_count_closed,
-                model.line_material,
                 model.riser_config,
                 model.manufacturer_url,
             ),
@@ -218,12 +243,38 @@ class Database:
         self.conn.commit()
 
     def upsert_size_variant(self, sv: SizeVariant, model_id: int) -> int:
-        """Insert or find existing size variant by model_id + size_label. Returns id."""
+        """Insert or update size variant by model_id + size_label. Fills NULL fields. Returns id."""
         row = self.conn.execute(
-            "SELECT id FROM size_variants WHERE model_id = ? AND size_label = ?",
+            "SELECT * FROM size_variants WHERE model_id = ? AND size_label = ?",
             (model_id, sv.size_label),
         ).fetchone()
         if row:
+            updates: list[str] = []
+            values: list = []
+            fill_fields = {
+                "flat_area_m2": sv.flat_area_m2,
+                "flat_span_m": sv.flat_span_m,
+                "flat_aspect_ratio": sv.flat_aspect_ratio,
+                "proj_area_m2": sv.proj_area_m2,
+                "proj_span_m": sv.proj_span_m,
+                "proj_aspect_ratio": sv.proj_aspect_ratio,
+                "wing_weight_kg": sv.wing_weight_kg,
+                "ptv_min_kg": sv.ptv_min_kg,
+                "ptv_max_kg": sv.ptv_max_kg,
+                "line_length_m": sv.line_length_m,
+            }
+            for col, new_val in fill_fields.items():
+                if row[col] is None and new_val is not None:
+                    updates.append(f"{col} = ?")
+                    values.append(new_val)
+            if updates:
+                updates.append("updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')")
+                values.append(row["id"])
+                self.conn.execute(
+                    f"UPDATE size_variants SET {', '.join(updates)} WHERE id = ?",
+                    values,
+                )
+                self.conn.commit()
             return row["id"]
 
         cur = self.conn.execute(
@@ -269,8 +320,41 @@ class Database:
         self.conn.commit()
         return cur.lastrowid  # type: ignore[return-value]
 
-    def insert_certification(self, cert: Certification, size_variant_id: int) -> int:
-        """Insert a certification record. Returns id."""
+    def upsert_certification(self, cert: Certification, size_variant_id: int) -> int:
+        """Insert or replace a certification record for a size variant.
+
+        Replaces any existing cert with the same (size_variant_id, standard).
+        """
+        std_val = cert.standard.value if cert.standard else None
+
+        # Check for existing cert with same standard on this size
+        row = self.conn.execute(
+            "SELECT id FROM certifications WHERE size_variant_id = ? AND standard = ?",
+            (size_variant_id, std_val),
+        ).fetchone()
+
+        if row:
+            self.conn.execute(
+                """UPDATE certifications
+                SET classification = ?, ptv_min_kg = ?, ptv_max_kg = ?,
+                    test_lab = ?, report_number = ?, report_url = ?,
+                    test_date = ?, status = ?
+                WHERE id = ?""",
+                (
+                    cert.classification,
+                    cert.ptv_min_kg,
+                    cert.ptv_max_kg,
+                    cert.test_lab,
+                    cert.report_number,
+                    cert.report_url,
+                    str(cert.test_date) if cert.test_date else None,
+                    cert.status.value,
+                    row["id"],
+                ),
+            )
+            self.conn.commit()
+            return row["id"]
+
         cur = self.conn.execute(
             """INSERT INTO certifications
             (size_variant_id, standard, classification,
@@ -279,7 +363,7 @@ class Database:
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 size_variant_id,
-                cert.standard.value if cert.standard else None,
+                std_val,
                 cert.classification,
                 cert.ptv_min_kg,
                 cert.ptv_max_kg,
@@ -292,6 +376,18 @@ class Database:
         )
         self.conn.commit()
         return cur.lastrowid  # type: ignore[return-value]
+
+    # Backward compat alias
+    insert_certification = upsert_certification
+
+    def delete_certifications_for_size(self, size_variant_id: int) -> int:
+        """Delete all certification records for a size variant. Returns count deleted."""
+        cur = self.conn.execute(
+            "DELETE FROM certifications WHERE size_variant_id = ?",
+            (size_variant_id,),
+        )
+        self.conn.commit()
+        return cur.rowcount
 
     def insert_provenance(self, prov: Provenance, model_id: int) -> int:
         """Insert a provenance record. Returns id."""

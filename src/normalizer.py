@@ -31,28 +31,31 @@ logger = logging.getLogger(__name__)
 _CERT_PATTERN = re.compile(
     r"(?P<standard>EN|LTF|AFNOR|DGAC|CCC|CIVL\s*CCC)"
     r"[\s\-/]*"
-    r"(?P<class>[A-D])?",
+    r"(?P<class>[A-D]|\d(?:-\d)?)?",
     re.IGNORECASE,
 )
 
-_DHV_MAP = {
-    "1": ("LTF", "A"),
-    "1-2": ("LTF", "B"),
-    "2": ("LTF", "C"),
-    "2-3": ("LTF", "C"),
-    "3": ("LTF", "D"),
-}
+# Old DHV numeric classes that map to LTF standard.
+# We preserve the original numeric classification as-is (facts only),
+# but identify the standard as LTF (DHV administered LTF).
+_DHV_NUMERIC = {"1", "1-2", "2", "2-3", "3"}
 
 
 def normalize_certification(raw: str) -> tuple[CertStandard, str]:
     """Parse a raw certification string into (standard, classification).
 
+    Preserves the original classification as it appears on the wing's
+    type-label (facts only). Old DHV/LTF numeric classes (1, 1-2, 2, 2-3, 3)
+    are kept as-is, not converted to modern letter equivalents.
+
     Examples:
         'EN B'      → (CertStandard.EN, 'B')
         'LTF A'     → (CertStandard.LTF, 'A')
+        'LTF 2'     → (CertStandard.LTF, '2')     # preserved as-is
         'CCC'       → (CertStandard.CCC, 'CCC')
-        'DHV 1-2'   → (CertStandard.LTF, 'B')
-        'A'         → (CertStandard.EN, 'A')   # bare letter defaults to EN
+        'DHV 1-2'   → (CertStandard.LTF, '1-2')   # DHV→LTF, class preserved
+        'A'         → (CertStandard.EN, 'A')       # bare letter defaults to EN
+        '2'         → (CertStandard.LTF, '2')      # bare digit defaults to LTF
     """
     raw = raw.strip()
 
@@ -67,13 +70,12 @@ def normalize_certification(raw: str) -> tuple[CertStandard, str]:
     if combined:
         return CertStandard.EN, combined.group(1).upper()
 
-    # Handle DHV numbering
+    # Handle DHV numbering — standard becomes LTF, classification preserved
     dhv_match = re.match(r"DHV\s*(\d(?:-\d)?)", raw, re.IGNORECASE)
     if dhv_match:
         key = dhv_match.group(1)
-        if key in _DHV_MAP:
-            std, cls = _DHV_MAP[key]
-            return CertStandard(std), cls
+        if key in _DHV_NUMERIC:
+            return CertStandard.LTF, key
 
     # Handle EN/LTF patterns
     m = _CERT_PATTERN.search(raw)
@@ -82,12 +84,20 @@ def normalize_certification(raw: str) -> tuple[CertStandard, str]:
         if std_raw.startswith("CIVL"):
             return CertStandard.CCC, "CCC"
         standard = CertStandard(std_raw)
-        classification = (m.group("class") or "").upper()
+        classification = (m.group("class") or "")
+        # Preserve original casing for numeric ("2"), uppercase for letters
+        if classification and classification[0].isalpha():
+            classification = classification.upper()
         return standard, classification
 
     # Bare letter (A, B, C, D) defaults to EN
     if re.match(r"^[A-Da-d]$", raw):
         return CertStandard.EN, raw.upper()
+
+    # Bare digit (1, 1-2, 2, 2-3, 3) → old LTF/DHV numeric, preserved
+    bare_num = re.match(r"^(\d(?:-\d)?)$", raw)
+    if bare_num and bare_num.group(1) in _DHV_NUMERIC:
+        return CertStandard.LTF, bare_num.group(1)
 
     logger.warning("Could not normalize certification: '%s'", raw)
     return CertStandard.other, raw
@@ -149,7 +159,6 @@ def normalize_extraction(
         year_released=result.year,
         is_current=is_current,
         cell_count=result.cell_count,
-        line_material=result.line_material,
         riser_config=result.riser_config,
         manufacturer_url=source_url or result.product_url,
     )

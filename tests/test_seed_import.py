@@ -106,7 +106,7 @@ class TestBuildWingModel:
     def test_basic(self):
         row = {"name": "Rush 6", "year": "2023", "category": "paraglider",
                "is_current": "true", "cell_count": "55",
-               "line_material": "Liros PPSL", "riser_config": "3-liner",
+               "riser_config": "3-liner",
                "manufacturer_url": "https://flyozone.com/rush-6"}
         wing = _build_wing_model(row, "ozone")
         assert wing.name == "Rush 6"
@@ -118,7 +118,7 @@ class TestBuildWingModel:
     def test_missing_optional(self):
         row = {"name": "Test Wing", "year": "", "category": "",
                "is_current": "", "cell_count": "",
-               "line_material": "", "riser_config": "",
+               "riser_config": "",
                "manufacturer_url": ""}
         wing = _build_wing_model(row, "test")
         assert wing.name == "Test Wing"

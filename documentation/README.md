@@ -20,8 +20,10 @@ Iteration numbers are **global** across all folders (chronological project order
 | 09 | `ITERATION_09_TEST_SUITE.md` | `architecture/` | Pipeline test suite — 129 pytest tests, strict spec assertions, 3 bugs fixed | Complete |
 | 10 | `ITERATION_10_SCHEMA_REDESIGN.md` | `data/` | Schema v2 — 7-table redesign, provenance model, performance separation, 18 decisions | Complete |
 | 11 | `ITERATION_11_SEED_IMPORT_BENCHMARK.md` | `data/` | Seed import + benchmark — CSV import, 3-axis scoring (completeness/quality/accuracy), 60 models baseline | Complete |
+| 12 | `ITERATION_12_DATA_VALIDATOR.md` | `data/` | Data validator — per-model issue detection, interactive action prompts, persistent log with resume | Complete |
+| 13 | `ITERATION_13_FIX_FLOW_CERTIFICATIONS.md` | `data/` | Fix command — interactive re-extract with preview, cert normalization preserves original labels, dedup fix | Complete |
 
-**Next iteration number: 12**
+**Next iteration number: 13**
 
 ---
 

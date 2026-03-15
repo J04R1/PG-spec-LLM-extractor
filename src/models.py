@@ -95,7 +95,6 @@ class WingModel(BaseModel):
     is_current: bool = True
     cell_count: Optional[int] = None
     cell_count_closed: Optional[int] = None
-    line_material: Optional[str] = None
     riser_config: Optional[str] = None
     manufacturer_url: Optional[str] = None
 
@@ -205,7 +204,6 @@ class ExtractionResult(BaseModel):
     category: Optional[WingCategory] = None
     target_use: Optional[TargetUse] = None
     cell_count: Optional[int] = None
-    line_material: Optional[str] = None
     riser_config: Optional[str] = None
     product_url: Optional[str] = None
     year: Optional[int] = None

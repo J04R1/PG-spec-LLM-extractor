@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 # CSV columns that map to model-level fields (same value for all sizes of a model)
 _MODEL_LEVEL_FIELDS = {
     "name", "year", "category", "target_use", "is_current",
-    "cell_count", "line_material", "riser_config", "manufacturer_url",
+    "cell_count", "riser_config", "manufacturer_url",
 }
 
 
@@ -214,7 +214,6 @@ def _build_wing_model(row: dict, mfr_slug: str) -> WingModel:
         year_released=_safe_int(row.get("year", "")),
         is_current=_safe_bool(row.get("is_current", "")),
         cell_count=_safe_int(row.get("cell_count", "")),
-        line_material=row.get("line_material", "").strip() or None,
         riser_config=row.get("riser_config", "").strip() or None,
         manufacturer_url=row.get("manufacturer_url", "").strip() or None,
     )

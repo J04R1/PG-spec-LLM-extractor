@@ -1,0 +1,112 @@
+# Nova Performance Paragliders Specs — Extraction Config
+# Used by: src/pipeline.py
+
+manufacturer:
+  name: Nova
+  slug: nova
+  website: https://www.nova.eu
+
+sources:
+  current_gliders:
+    listing_url: https://www.nova.eu/en/gliders/
+    url_pattern: "/en/gliders/"
+    is_current: true
+    url_excludes:
+      - "#"
+      - "?"
+      - "sitemap.xml"
+      - "/en/gliders/previous-gliders"
+      - "/en/harnesses"
+      - "/en/parachutes"
+      - "/en/accessories"
+      - "/en/winch"
+      - "/en/service"
+      - "/en/shop"
+      - "/en/gliders/$"
+
+  previous_gliders:
+    listing_url: https://www.nova.eu/en/gliders/previous-gliders/
+    url_pattern: "/en/gliders/"
+    is_current: false
+    url_excludes:
+      - "#"
+      - "?"
+      - "sitemap.xml"
+      - "/en/gliders/previous-gliders"
+      - "/en/harnesses"
+      - "/en/parachutes"
+      - "/en/accessories"
+      - "/en/winch"
+      - "/en/service"
+      - "/en/shop"
+      - "/en/gliders/$"
+
+extraction:
+  # Nova pages are JS-rendered (TYPO3 CMS) — Crawl4AI with Playwright is required.
+  strategy: markdown
+
+  llm:
+    provider: "ollama"
+
+    prompt: |
+      Extract ONLY the factual technical specifications from this Nova paraglider product page.
+
+      RULES:
+      - Read the technical specs table carefully. Each column is a size (XXS, XS, S, M, ML, L, XL, or numeric like 16, 18, 20, 22)
+      - "Certified weight range", "Approved Takeoff Weight", or "Take-off weight" gives ptv_min_kg and ptv_max_kg (split the range like "65-85" into min=65, max=85)
+      - "Recommended weight range" is separate — only extract the certified range for ptv_min/max
+      - "Weight" or "Glider weight" gives wing_weight_kg
+      - "Certification" or "EN/LTF" gives the certification class letter (A, B, C, D, or CCC)
+      - Note: Nova sometimes lists dual certs like "EN C / LTF D" — use the EN class (e.g. "C")
+      - "Number of cells" or "Cells" is the cell_count (usually same for all sizes — put it at top level, not per-size)
+      - If line materials are listed, capture them as a single string
+      - For target_use: EN-A wings = "school" or "leisure", EN-B = "leisure" or "xc", EN-C = "xc", EN-D = "competition", CCC = "competition"
+      - For category: use "tandem" for tandem wings (e.g. BION), "single_skin" for single-skin wings (e.g. DOUBLESKIN), "miniwing" for hike-and-fly miniwings (e.g. BANTAM), "paraglider" for everything else
+      - DO NOT extract marketing descriptions, pilot reviews, or any prose text
+      - DO NOT extract image URLs
+      - All numeric values must be plain numbers (no units, no "kg", no "m²")
+      - Return one size entry per column in the specs table
+
+  schema:
+    type: object
+    properties:
+      model_name:
+        type: string
+        description: "Wing model name without manufacturer (e.g. 'MENTOR 7', 'ION 7 Light', 'XENON 3')"
+      category:
+        type: string
+        enum: ["paraglider", "tandem", "miniwing", "single_skin", "acro", "speedwing", "paramotor"]
+      target_use:
+        type: string
+        enum: ["school", "leisure", "xc", "competition", "hike_and_fly", "vol_biv", "acro", "tandem"]
+      cell_count:
+        type: integer
+      line_material:
+        type: string
+      sizes:
+        type: array
+        items:
+          type: object
+          properties:
+            size_label:
+              type: string
+            flat_area_m2:
+              type: number
+            flat_span_m:
+              type: number
+            flat_aspect_ratio:
+              type: number
+            proj_area_m2:
+              type: number
+            proj_span_m:
+              type: number
+            proj_aspect_ratio:
+              type: number
+            wing_weight_kg:
+              type: number
+            ptv_min_kg:
+              type: number
+            ptv_max_kg:
+              type: number
+            certification:
+              type: string

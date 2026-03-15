@@ -100,6 +100,7 @@ All documentation lives in `documentation/`, grouped by domain:
 | `src/db.py` | SQLite storage (7-table schema v2, upsert, provenance) |
 | `src/seed_import.py` | CSV enrichment import → v2 schema |
 | `src/benchmark.py` | Quality/completeness/accuracy scoring engine |
+| `src/validator.py` | Per-model validation, issue detection, interactive action log |
 | `src/crawler.py` | Crawl4AI wrapper (stub — Iteration 2) |
 | `src/pipeline.py` | Typer CLI entry point (run/status/reset) |
 | `config/manufacturers/ozone.yaml` | Ozone manufacturer config |

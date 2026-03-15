@@ -293,7 +293,6 @@ def _score_models(conn: sqlite3.Connection) -> TableScore:
         "category":         None,
         "year_released":    PLAUSIBILITY.get("year_released"),
         "cell_count":       PLAUSIBILITY.get("cell_count"),
-        "line_material":    None,
         "riser_config":     None,
         "manufacturer_url": None,
     }
