@@ -240,11 +240,58 @@ allowing commit.
 |------|---------|
 | `src/validator.py` | Add `validate_model_data()` for in-memory validation |
 | `src/seed_import.py` | Cert normalization in `_build_certification()`, validation gate |
-| `src/pipeline.py` | Update `seed`, add `rebuild` command, validate in `fix` |
+| `src/pipeline.py` | Update `seed`, add `rebuild` command, validate in `fix`, enhanced `fix` listing |
 | `config/manufacturers/ozone.yaml` | Add `import` section (csv_files, output_db) |
 | `config/manufacturers/advance.yaml` | Add `import` section |
-| `tests/test_validator.py` | Tests for `validate_model_data()` |
+| `tests/test_validator.py` | Tests for `validate_model_data()`, updated `_seed_db` for validation gate |
 | `tests/test_seed_import.py` | Tests for validation gate + cert normalization |
+
+---
+
+## Fix Command Improvements
+
+### Enhanced issue listing
+
+The `fix` command now shows each model's specific issues instead of just a count:
+
+**Before:**
+```
+1. △ Alpina — 2 issues
+6. △ Buzz — 4 issues
+```
+
+**After:**
+```
+1. △ Alpina — missing_year_released; discontinued_no_year
+6. △ Buzz — missing_cell_count; missing_year_released; discontinued_no_year; no_certifications
+50. △ Mojo — missing_year_released; discontinued_no_year; missing_flat_area_m2 (L, M, S, XL, XS)
+```
+
+Size-specific issues show affected sizes in parentheses. The full list is shown
+(no 20-item cutoff) for easy copy-paste.
+
+### AI-ready prompt header
+
+The listing now starts with a structured prompt block that can be copied directly
+into an AI agent:
+
+```
+── Ozone — 83 models need data ──
+
+Most common missing data:
+  missing_year_released: 70 models
+  no_certifications: 38 models
+  missing_cell_count: 15 models
+
+CSV format (one row per size per model):
+manufacturer_slug,name,year,...,cert_report_url
+
+Example row:
+ozone,Rush 6,2023,paraglider,xc,false,55,...,EN,B,,,
+```
+
+This gives an AI agent everything needed: manufacturer context, what's missing,
+exact CSV format, and an example row — ready for web research and CSV generation.
 
 ---
 

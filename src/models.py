@@ -94,7 +94,6 @@ class WingModel(BaseModel):
     year_discontinued: Optional[int] = None
     is_current: bool = True
     cell_count: Optional[int] = None
-    cell_count_closed: Optional[int] = None
     riser_config: Optional[str] = None
     manufacturer_url: Optional[str] = None
 

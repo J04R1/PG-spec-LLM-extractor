@@ -66,7 +66,6 @@ CREATE TABLE models (
     year_discontinued INTEGER,                        -- Year taken off market (NULL = active or unknown)
     is_current        INTEGER DEFAULT 1,              -- Still in production
     cell_count        INTEGER,                        -- Total cells (open + closed)
-    cell_count_closed INTEGER,                        -- Closed cells (shark-nose designs, NULL if none)
     line_material     TEXT,                            -- Primary line material(s)
     riser_config      TEXT,                            -- Full line plan + riser layout
                                                       -- e.g. "3-liner (split-A, winglets)"
@@ -203,7 +202,7 @@ D11	Size labels preserved as-is	No normalization — "22", "XS", "MS" kept as ma
 D12	Rename country → country_code	Explicit ISO 3166-1 alpha-2 standard
 D13	Rename year → year_released	Unambiguous semantics
 D14	Add year_discontinued	Temporal lifecycle tracking
-D15	Add cell_count_closed	Shark-nose designs increasingly common
+D15	~~Add cell_count_closed~~	Removed — no data source provides this value
 D16	Add line_length_m to size_variants	Some manufacturers publish this
 D17	No raw external imports without validation	Build data validator first; fredvol/DHV imported only after quality checks pass
 D18	Ozone + Advance enrichment CSVs as seed data	Already LLM-extracted and validated — first population of new schema

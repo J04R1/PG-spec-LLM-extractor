@@ -52,7 +52,6 @@ CREATE TABLE IF NOT EXISTS models (
     year_discontinued INTEGER,
     is_current        INTEGER DEFAULT 1,
     cell_count        INTEGER,
-    cell_count_closed INTEGER,
     riser_config      TEXT,
     manufacturer_url  TEXT,
     created_at        TEXT    DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
@@ -189,7 +188,6 @@ class Database:
                 "year_released": model.year_released,
                 "year_discontinued": model.year_discontinued,
                 "cell_count": model.cell_count,
-                "cell_count_closed": model.cell_count_closed,
                 "riser_config": model.riser_config,
                 "manufacturer_url": model.manufacturer_url,
             }
@@ -214,9 +212,9 @@ class Database:
         cur = self.conn.execute(
             """INSERT INTO models
             (manufacturer_id, name, slug, category, year_released,
-             year_discontinued, is_current, cell_count, cell_count_closed,
+             year_discontinued, is_current, cell_count,
              riser_config, manufacturer_url)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 manufacturer_id,
                 model.name,
@@ -226,7 +224,6 @@ class Database:
                 model.year_discontinued,
                 1 if model.is_current else 0,
                 model.cell_count,
-                model.cell_count_closed,
                 model.riser_config,
                 model.manufacturer_url,
             ),

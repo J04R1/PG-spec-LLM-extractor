@@ -279,7 +279,6 @@ def _validate_model(conn: sqlite3.Connection, model: sqlite3.Row) -> ModelValida
         year_discontinued=model["year_discontinued"],
         is_current=bool(model["is_current"]),
         cell_count=model["cell_count"],
-        cell_count_closed=model["cell_count_closed"] if "cell_count_closed" in model.keys() else None,
         riser_config=model["riser_config"],
         manufacturer_url=model["manufacturer_url"],
     )
@@ -344,13 +343,21 @@ def validate_model_data(
     manufacturer_slug: str,
     model_id: int = 0,
     cert_size_labels: list[str] | None = None,
+    plausibility_overrides: dict[str, tuple[float, float]] | None = None,
+    skip_missing_warnings: bool = False,
 ) -> ModelValidation:
     """Validate model data in-memory (no DB dependency).
 
     Can be called both during import (pre-storage gate) and for DB validation.
     cert_size_labels maps each cert to its size label (parallel with certs list).
     If not provided, certs are matched to sizes by index.
+
+    plausibility_overrides: override specific PLAUSIBILITY ranges,
+        e.g. {"year_released": (1980, 2026)} for historical data.
+    skip_missing_warnings: if True, suppress all missing_* warnings.
     """
+    # Merge plausibility ranges with overrides
+    plausibility = {**PLAUSIBILITY, **(plausibility_overrides or {})}
     mv = ModelValidation(
         model_id=model_id,
         model_slug=model.slug,
@@ -362,18 +369,19 @@ def validate_model_data(
     # ── Model-level checks ─────────────────────────────────────────────
 
     # Missing critical fields
-    _CRITICAL_ATTRS = {"category": "category", "cell_count": "cell_count", "manufacturer_url": "manufacturer_url"}
-    for field_name, attr in _CRITICAL_ATTRS.items():
-        if getattr(model, attr, None) is None:
-            mv.issues.append(ModelIssue(
-                check=f"missing_{field_name}",
-                severity=Severity.warning,
-                message=f"Missing {field_name}",
-                field=field_name,
-            ))
+    if not skip_missing_warnings:
+        _CRITICAL_ATTRS = {"category": "category", "cell_count": "cell_count", "manufacturer_url": "manufacturer_url"}
+        for field_name, attr in _CRITICAL_ATTRS.items():
+            if getattr(model, attr, None) is None:
+                mv.issues.append(ModelIssue(
+                    check=f"missing_{field_name}",
+                    severity=Severity.warning,
+                    message=f"Missing {field_name}",
+                    field=field_name,
+                ))
 
     # Year released missing
-    if model.year_released is None:
+    if not skip_missing_warnings and model.year_released is None:
         mv.issues.append(ModelIssue(
             check="missing_year_released",
             severity=Severity.warning,
@@ -383,7 +391,7 @@ def validate_model_data(
 
     # Year plausibility
     if model.year_released is not None:
-        lo, hi = PLAUSIBILITY["year_released"]
+        lo, hi = plausibility["year_released"]
         if not (lo <= model.year_released <= hi):
             mv.issues.append(ModelIssue(
                 check="implausible_year_released",
@@ -394,7 +402,7 @@ def validate_model_data(
 
     # Cell count plausibility
     if model.cell_count is not None:
-        lo, hi = PLAUSIBILITY["cell_count"]
+        lo, hi = plausibility["cell_count"]
         if not (lo <= model.cell_count <= hi):
             mv.issues.append(ModelIssue(
                 check="implausible_cell_count",
@@ -428,15 +436,16 @@ def validate_model_data(
         label = size.size_label
 
         # Missing critical size fields
-        for field_name in _CRITICAL_SIZE_FIELDS:
-            if getattr(size, field_name, None) is None:
-                mv.issues.append(ModelIssue(
-                    check=f"missing_{field_name}",
-                    severity=Severity.warning,
-                    message=f"Size {label}: missing {field_name}",
-                    field=field_name,
-                    size_label=label,
-                ))
+        if not skip_missing_warnings:
+            for field_name in _CRITICAL_SIZE_FIELDS:
+                if getattr(size, field_name, None) is None:
+                    mv.issues.append(ModelIssue(
+                        check=f"missing_{field_name}",
+                        severity=Severity.warning,
+                        message=f"Size {label}: missing {field_name}",
+                        field=field_name,
+                        size_label=label,
+                    ))
 
         # PTV consistency
         if size.ptv_min_kg is not None and size.ptv_max_kg is not None:
@@ -476,7 +485,7 @@ def validate_model_data(
                 ))
 
         # Plausibility checks on numeric fields
-        for field_name, (lo, hi) in PLAUSIBILITY.items():
+        for field_name, (lo, hi) in plausibility.items():
             if field_name in ("cell_count", "year_released"):
                 continue  # checked at model level
             val = getattr(size, field_name, None)
@@ -491,7 +500,7 @@ def validate_model_data(
 
     # ── Certification checks ───────────────────────────────────────────
 
-    if not certs:
+    if not certs and not skip_missing_warnings:
         mv.issues.append(ModelIssue(
             check="no_certifications",
             severity=Severity.warning,

@@ -30,6 +30,8 @@ from .db import Database
 from .extractor import extract_specs
 from .models import ExtractionResult, Manufacturer, TargetUse
 from .normalizer import normalize_certification, normalize_extraction
+from .dhv_import import import_dhv_csv
+from .fredvol_import import import_fredvol_csv
 from .seed_import import import_enrichment_csv
 from .validator import (
     Action,
@@ -192,6 +194,8 @@ def seed(
     csv_file: str = typer.Option(..., "--csv", help="Path to enrichment CSV"),
     db_path: str = typer.Option("output/seed.db", "--db", help="Output database path"),
     method: str = typer.Option("llm_enrichment_csv", "--method", help="Extraction method label"),
+    post_validate: bool = typer.Option(False, "--post-validate/--no-post-validate",
+                                       help="Run DB-wide validation after import"),
 ) -> None:
     """Import an enrichment CSV as seed data into the database."""
     csv_p = Path(csv_file)
@@ -220,6 +224,18 @@ def seed(
         for mv in skipped_models:
             crits = [i for i in mv.issues if i.severity.value == "critical"]
             typer.echo(f"  ✗ {mv.model_name}: {', '.join(i.check for i in crits)}")
+
+    # Post-import DB-wide validation sweep
+    if post_validate:
+        db_p = Path(db_path)
+        if db_p.exists():
+            typer.echo(f"\n── Post-import validation ──")
+            vlog = validate_database(db_p)
+            s = vlog.summary()
+            typer.echo(f"  ✓ Clean:    {s['clean']} models")
+            typer.echo(f"  △ Warnings: {s['with_issues']} models")
+            typer.echo(f"  ✗ Critical: {s['critical']} models")
+            typer.echo(f"  Validation log: {vlog.log_path}")
 
 
 @app.command()
@@ -372,6 +388,73 @@ def _save_progress(path: Path, progress: dict) -> None:
         json.dump(progress, f, indent=2)
 
 
+@app.command(name="import-fredvol")
+def import_fredvol(
+    db_path: str = typer.Option(..., "--db", help="Output database path"),
+    csv_file: str = typer.Option("data/fredvol_raw.csv", "--csv", help="Path to fredvol CSV"),
+    manufacturer: str = typer.Option(None, "--manufacturer", "-m", help="Filter to one manufacturer slug"),
+) -> None:
+    """Import wing specs from fredvol_raw.csv (Paraglider_specs_studies dataset)."""
+    csv_p = Path(csv_file)
+    if not csv_p.exists():
+        typer.echo(f"ERROR: CSV not found: {csv_p}", err=True)
+        raise typer.Exit(1)
+
+    db = Database(db_path)
+    db.connect()
+    try:
+        counts = import_fredvol_csv(
+            csv_p, db, manufacturer_filter=manufacturer,
+        )
+    finally:
+        db.close()
+
+    typer.echo(f"fredvol import from {csv_p.name}:")
+    for key, val in counts.items():
+        if key == "skipped_models":
+            continue
+        typer.echo(f"  {key}: {val}")
+    typer.echo(f"Database: {db_path}")
+
+    skipped_models = counts.get("skipped_models", [])
+    if skipped_models:
+        typer.echo(f"\n⚠ {len(skipped_models)} model(s) skipped (critical issues):")
+        for mv in skipped_models:
+            crits = [i for i in mv.issues if i.severity.value == "critical"]
+            typer.echo(f"  ✗ {mv.model_name}: {', '.join(i.check for i in crits)}")
+
+
+@app.command(name="import-dhv")
+def import_dhv(
+    db_path: str = typer.Option(..., "--db", help="Target database (must exist for enrichment)"),
+    csv_file: str = typer.Option("data/dhv_unmatched.csv", "--csv", help="Path to DHV CSV"),
+    manufacturer: str = typer.Option(None, "--manufacturer", "-m", help="Filter to one manufacturer slug"),
+    create_missing: bool = typer.Option(True, "--create-missing/--no-create-missing",
+                                        help="Create minimal records for unmatched DHV entries"),
+) -> None:
+    """Enrich an existing database with DHV certification records."""
+    csv_p = Path(csv_file)
+    if not csv_p.exists():
+        typer.echo(f"ERROR: CSV not found: {csv_p}", err=True)
+        raise typer.Exit(1)
+
+    db = Database(db_path)
+    db.connect()
+    try:
+        counts = import_dhv_csv(
+            csv_p, db,
+            manufacturer_filter=manufacturer,
+            create_missing=create_missing,
+        )
+    finally:
+        db.close()
+
+    typer.echo(f"DHV import from {csv_p.name}:")
+    for key, val in counts.items():
+        typer.echo(f"  {key}: {val}")
+    typer.echo(f"Database: {db_path}")
+
+
 @app.command()
 def benchmark(
     db_path: str = typer.Option(..., "--db", help="Path to database to benchmark"),
@@ -512,8 +595,8 @@ def fix(
 
         # Print prompt header
         csv_header = (
-            "manufacturer_slug,name,year,category,target_use,is_current,cell_count,"
-            "line_material,riser_config,manufacturer_url,description,size_label,"
+            "manufacturer_slug,name,year_released, year_discontinued,category,target_use,is_current,cell_count,"
+            "line_material,riser_config,manufacturer_url,size_label,"
             "flat_area_m2,flat_span_m,flat_aspect_ratio,proj_area_m2,proj_span_m,"
             "proj_aspect_ratio,wing_weight_kg,ptv_min_kg,ptv_max_kg,"
             "speed_trim_kmh,speed_max_kmh,glide_ratio_best,min_sink_ms,"
@@ -522,7 +605,7 @@ def fix(
         typer.echo(f"── {mfr_name} — {len(pending)} models need data ──\n")
         typer.echo("Most common missing data:")
         for check, count in sorted(missing_fields.items(), key=lambda x: -x[1]):
-            typer.echo(f"  {check}: {count} models")
+            typer.echo(f"  {check}, ")
 
         typer.echo(f"\nCSV format (one row per size per model):")
         typer.echo(csv_header)

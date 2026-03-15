@@ -22,9 +22,12 @@ Iteration numbers are **global** across all folders (chronological project order
 | 11 | `ITERATION_11_SEED_IMPORT_BENCHMARK.md` | `data/` | Seed import + benchmark — CSV import, 3-axis scoring (completeness/quality/accuracy), 60 models baseline | Complete |
 | 12 | `ITERATION_12_DATA_VALIDATOR.md` | `data/` | Data validator — per-model issue detection, interactive action prompts, persistent log with resume | Complete |
 | 13 | `ITERATION_13_FIX_FLOW_CERTIFICATIONS.md` | `data/` | Fix command — interactive re-extract with preview, cert normalization preserves original labels, dedup fix | Complete |
-| 14 | `ITERATION_14_VALIDATED_IMPORT_PIPELINE.md` | `data/` | Validated import pipeline — validation gate at import, per-manufacturer DBs, resumable rebuild command | In Progress |
+| 14 | `ITERATION_14_VALIDATED_IMPORT_PIPELINE.md` | `data/` | Validated import pipeline — validation gate at import, per-manufacturer DBs, resumable rebuild command | Complete |
+| 15 | `ITERATION_15_DHV_DATA_ANALYSIS.md` | `data/` | DHV data analysis — certification enrichment assessment, adapter recommendation, fredvol cross-ref | Analysis |
+| 16 | `ITERATION_16_FREDVOL_DHV_UNIFIED_IMPORT.md` | `data/` | fredvol + DHV unified import — adapters, manufacturer curation (T1/T2/legacy), CLI commands, 76 tests | In Progress |
+| 17 | `ITERATION_17_VALIDATION_CONSISTENCY.md` | `data/` | Validation consistency — per-model gate for all importers, --post-validate for seed, relaxed fredvol profile, cert validation for DHV | In Progress |
 
-**Next iteration number: 13**
+**Next iteration number: 18**
 
 ---
 
