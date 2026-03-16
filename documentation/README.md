@@ -27,8 +27,9 @@ Iteration numbers are **global** across all folders (chronological project order
 | 16 | `ITERATION_16_FREDVOL_DHV_UNIFIED_IMPORT.md` | `data/` | fredvol + DHV unified import — adapters, manufacturer curation (T1/T2/legacy), CLI commands, 76 tests | In Progress |
 | 17 | `ITERATION_17_VALIDATION_CONSISTENCY.md` | `data/` | Validation consistency — per-model gate for all importers, --post-validate for seed, relaxed fredvol profile, cert validation for DHV | In Progress |
 | 18 | `ITERATION_18_SEED_YEAR_COLUMN_BUGFIX.md` | `data/` | Seed year column bugfix — `_build_wing_model()` read `year` instead of `year_released`/`year_discontinued`, silently dropping all year data from updated CSVs | Complete |
+| 19 | `ITERATION_19_EXTRACTOR_CERT_CELL_EXTRACTION.md` | `data/` | Extractor cert/cell extraction — markdown parser missing `"DHV"` and `"No of cells"` label mappings, silently dropping certifications and cell count | Not Started |
 
-**Next iteration number: 19**
+**Next iteration number: 20**
 
 ---
 
