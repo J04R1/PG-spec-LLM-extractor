@@ -340,3 +340,73 @@ class TestImportFredvolCSV:
         counts = import_fredvol_csv(csv_path, tmp_db)
         assert counts["manufacturers"] == 1  # Both map to "ozone"
         assert counts["models"] == 2
+
+
+# ── Validation gate tests ────────────────────────────────────────────────────
+
+
+class TestFredvolValidation:
+    """Tests for per-model validation gate in fredvol import."""
+
+    def _make_csv(self, tmp_path, rows_data):
+        csv_path = tmp_path / "validation_test.csv"
+        fieldnames = list(rows_data[0].keys())
+        with open(csv_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows_data)
+        return csv_path
+
+    def _row(self, name="TestWing", ptv_mini="80", ptv_maxi="100", year="2015", **overrides):
+        base = {
+            "": "0", "certif_AFNOR": "", "certif_DHV": "", "certif_EN": "B",
+            "certif_MISC": "", "certification": "B",
+            "flat_AR": "5.0", "flat_area": "25.0", "flat_span": "11.18",
+            "manufacturer": "TestMfr", "name": name,
+            "proj_AR": "", "proj_area": "", "proj_span": "",
+            "ptv_maxi": ptv_maxi, "ptv_mini": ptv_mini, "size": "M",
+            "source": "GliderBase", "weight": "4.5", "year": year,
+        }
+        base.update(overrides)
+        return base
+
+    def test_valid_model_imported(self, tmp_db, tmp_path):
+        csv_path = self._make_csv(tmp_path, [self._row()])
+        counts = import_fredvol_csv(csv_path, tmp_db, validate=True)
+        assert counts["models"] == 1
+        assert counts["skipped"] == 0
+
+    def test_ptv_min_gte_max_skipped(self, tmp_db, tmp_path):
+        csv_path = self._make_csv(tmp_path, [self._row(ptv_mini="120", ptv_maxi="80")])
+        counts = import_fredvol_csv(csv_path, tmp_db, validate=True)
+        assert counts["models"] == 0
+        assert counts["skipped"] == 1
+        assert len(counts["skipped_models"]) == 1
+        assert counts["skipped_models"][0].has_critical
+
+    def test_year_1985_accepted_with_fredvol_profile(self, tmp_db, tmp_path):
+        csv_path = self._make_csv(tmp_path, [self._row(year="1985")])
+        counts = import_fredvol_csv(csv_path, tmp_db, validate=True)
+        assert counts["models"] == 1
+        assert counts["skipped"] == 0
+
+    def test_year_1975_rejected(self, tmp_db, tmp_path):
+        csv_path = self._make_csv(tmp_path, [self._row(year="1975")])
+        counts = import_fredvol_csv(csv_path, tmp_db, validate=True)
+        assert counts["models"] == 0
+        assert counts["skipped"] == 1
+
+    def test_validate_false_imports_bad_data(self, tmp_db, tmp_path):
+        csv_path = self._make_csv(tmp_path, [self._row(ptv_mini="120", ptv_maxi="80")])
+        counts = import_fredvol_csv(csv_path, tmp_db, validate=False)
+        assert counts["models"] == 1  # Bad data goes through
+        assert counts["skipped"] == 0
+
+    def test_mixed_good_and_bad(self, tmp_db, tmp_path):
+        csv_path = self._make_csv(tmp_path, [
+            self._row(name="GoodWing"),
+            self._row(name="BadWing", ptv_mini="150", ptv_maxi="80"),
+        ])
+        counts = import_fredvol_csv(csv_path, tmp_db, validate=True)
+        assert counts["models"] == 1
+        assert counts["skipped"] == 1

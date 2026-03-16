@@ -336,7 +336,6 @@ def import_fredvol_csv(
         )
 
         # Insert each size variant (reuse already-built sizes)
-        cert_idx = 0
         for i, sv in enumerate(sizes):
             sv_id = db.upsert_size_variant(sv, model_id)
             size_count += 1

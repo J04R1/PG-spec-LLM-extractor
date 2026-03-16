@@ -228,7 +228,7 @@ _CRITICAL_MODEL_FIELDS = ["category", "cell_count", "manufacturer_url"]
 _CRITICAL_SIZE_FIELDS = ["flat_area_m2", "ptv_min_kg", "ptv_max_kg"]
 
 
-def validate_database(db_path: str | Path) -> ValidationLog:
+def validate_database(db_path: str | Path, source: str | Path = "") -> ValidationLog:
     """
     Validate every model in the database. Returns a ValidationLog with
     per-model issues.
@@ -241,6 +241,8 @@ def validate_database(db_path: str | Path) -> ValidationLog:
     conn.row_factory = sqlite3.Row
 
     log_file = db_path.with_suffix(".validation.json")
+    if source:
+        log_file = log_file.with_name(f"{log_file.stem}_{Path(source).stem}.json")
     vlog = ValidationLog(
         log_path=log_file,
         timestamp=datetime.now(timezone.utc).isoformat(),

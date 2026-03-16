@@ -197,7 +197,7 @@ def seed(
     post_validate: bool = typer.Option(False, "--post-validate/--no-post-validate",
                                        help="Run DB-wide validation after import"),
 ) -> None:
-    """Import an enrichment CSV as seed data into the database."""
+    """Import an enrichment CSV as seed data into the database. --post-validate runs a validation sweep after import to flag any critical issues."""
     csv_p = Path(csv_file)
     if not csv_p.exists():
         typer.echo(f"ERROR: CSV not found: {csv_p}", err=True)
@@ -230,7 +230,7 @@ def seed(
         db_p = Path(db_path)
         if db_p.exists():
             typer.echo(f"\n── Post-import validation ──")
-            vlog = validate_database(db_p)
+            vlog = validate_database(db_p,csv_file)
             s = vlog.summary()
             typer.echo(f"  ✓ Clean:    {s['clean']} models")
             typer.echo(f"  △ Warnings: {s['with_issues']} models")
@@ -347,7 +347,7 @@ def rebuild(
         typer.echo(f"\nStep {len(csv_files) + 1}/{len(csv_files) + 1}: Post-import validation")
 
         if db_p.exists():
-            vlog = validate_database(db_p)
+            vlog = validate_database(db_p,"first_build")
 
             s = vlog.summary()
             typer.echo(f"  ✓ Clean:    {s['clean']} models")
@@ -386,6 +386,53 @@ def _save_progress(path: Path, progress: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(progress, f, indent=2)
+
+
+def _find_latest_validation_log(db_p: Path) -> Path:
+    """Find the most recent validation log for a DB, merging skipped models from _first_build.
+
+    Search order: newest .validation*.json by mtime, then merge import-rejected
+    models from _first_build that are still missing from the DB.
+    Returns the path to the chosen (or merged) log, or the canonical path if none exist.
+    """
+    import sqlite3
+
+    stem = db_p.stem  # e.g. "ozone"
+    candidates = sorted(
+        db_p.parent.glob(f"{stem}.validation*.json"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+
+    if not candidates:
+        return db_p.with_suffix(".validation.json")
+
+    latest = candidates[0]
+
+    # Merge import-rejected models from _first_build if it's a different file
+    first_build = db_p.with_name(f"{stem}.validation_first_build.json")
+    if first_build.exists() and first_build != latest:
+        vlog = ValidationLog.load(latest)
+        fb_vlog = ValidationLog.load(first_build)
+
+        # Get current DB model slugs
+        db_slugs: set[str] = set()
+        if db_p.exists():
+            conn = sqlite3.connect(str(db_p))
+            db_slugs = {r[0] for r in conn.execute("SELECT slug FROM models").fetchall()}
+            conn.close()
+
+        # Add models from _first_build that aren't in DB and aren't in the latest log
+        merged = 0
+        for slug, mv in fb_vlog.models.items():
+            if slug not in db_slugs and slug not in vlog.models:
+                vlog.models[slug] = mv
+                merged += 1
+
+        if merged:
+            vlog.save()
+
+    return latest
 
 
 @app.command(name="import-fredvol")
@@ -568,7 +615,8 @@ def fix(
         typer.echo(f"ERROR: Database not found: {db_p}", err=True)
         raise typer.Exit(1)
 
-    log_path = db_p.with_suffix(".validation.json")
+    # Find the most recent validation log for this DB
+    log_path = _find_latest_validation_log(db_p)
 
     # Pick the model to fix
     if model_slug:

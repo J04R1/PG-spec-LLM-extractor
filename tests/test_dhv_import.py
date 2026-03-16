@@ -311,3 +311,89 @@ class TestFredvolPlusDhvIntegration:
         assert cert_row["standard"] == "EN"
         assert cert_row["classification"] == "A"
         assert cert_row["test_date"] == "2022-05-18"
+
+
+# ── Cert validation tests ───────────────────────────────────────────────────
+
+
+class TestDhvCertValidation:
+    """Tests for cert classification validation in DHV import."""
+
+    def _make_dhv_csv(self, tmp_path, rows_data):
+        csv_path = tmp_path / "dhv_validation.csv"
+        fieldnames = list(rows_data[0].keys())
+        with open(csv_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows_data)
+        return csv_path
+
+    def _dhv_row(self, model="TestWing", equipment_class="B", **overrides):
+        base = {
+            "dhv_url": "https://service.dhv.de/db1/test",
+            "manufacturer": "Test Company",
+            "model": model,
+            "size": "M",
+            "equipment_class": equipment_class,
+            "test_centre": "Air Turquoise",
+            "test_date": "2023-01-15",
+            "report_url": "https://example.com/report",
+            "match_failure_reason": "mfr: test",
+        }
+        base.update(overrides)
+        return base
+
+    def test_valid_cert_imported(self, tmp_path):
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        db.connect()
+        try:
+            csv_path = self._make_dhv_csv(tmp_path, [self._dhv_row(equipment_class="B")])
+            counts = import_dhv_csv(csv_path, db, validate=True, create_missing=True)
+            assert counts["certifications"] == 1
+            assert counts["invalid_certs"] == 0
+        finally:
+            db.close()
+
+    def test_invalid_cert_class_skipped_by_mapper(self, tmp_path):
+        """'E' is not a valid EN class — _map_equipment_class returns None, skipped."""
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        db.connect()
+        try:
+            csv_path = self._make_dhv_csv(tmp_path, [self._dhv_row(equipment_class="E")])
+            counts = import_dhv_csv(csv_path, db, validate=True, create_missing=True)
+            assert counts["certifications"] == 0
+            # Skipped by _map_equipment_class (returns None), not by validation
+            assert counts["skipped"] == 1
+        finally:
+            db.close()
+
+    def test_validate_false_allows_invalid(self, tmp_path):
+        """Even with validate=False, 'E' is still skipped by _map_equipment_class."""
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        db.connect()
+        try:
+            csv_path = self._make_dhv_csv(tmp_path, [self._dhv_row(equipment_class="E")])
+            counts = import_dhv_csv(csv_path, db, validate=False, create_missing=True)
+            # "E" isn't mapped by _map_equipment_class, so it's skipped regardless
+            assert counts["certifications"] == 0
+        finally:
+            db.close()
+
+    def test_mixed_valid_and_invalid(self, tmp_path):
+        """Valid A/C imported, invalid E skipped by mapper."""
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        db.connect()
+        try:
+            csv_path = self._make_dhv_csv(tmp_path, [
+                self._dhv_row(model="Good", equipment_class="A"),
+                self._dhv_row(model="Bad", equipment_class="E"),
+                self._dhv_row(model="Good2", equipment_class="C"),
+            ])
+            counts = import_dhv_csv(csv_path, db, validate=True, create_missing=True)
+            assert counts["certifications"] == 2
+        finally:
+            db.close()

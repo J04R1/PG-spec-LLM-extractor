@@ -16,6 +16,7 @@ from src.validator import (
     Severity,
     ValidationLog,
     validate_database,
+    validate_model_data,
 )
 
 
@@ -289,3 +290,120 @@ class TestValidateDatabase:
         s = vlog.summary()
         assert s["total_models"] == 3
         assert s["clean"] >= 1
+
+
+# ── validate_model_data parameter tests ────────────────────────────────────────
+
+from src.models import WingModel, SizeVariant, Certification, CertStandard, WingCategory
+
+
+class TestValidateModelDataParams:
+    """Tests for plausibility_overrides and skip_missing_warnings."""
+
+    def _make_wing(self, year=2023, cell_count=55, category=WingCategory.paraglider):
+        return WingModel(
+            name="TestWing", slug="test-testwing",
+            category=category, year_released=year,
+            is_current=True, cell_count=cell_count,
+            manufacturer_url="https://example.com/test",
+        )
+
+    def _make_size(self, ptv_min=80, ptv_max=100, area=25.0, span=11.2, ar=5.018):
+        return SizeVariant(
+            size_label="M",
+            flat_area_m2=area, flat_span_m=span, flat_aspect_ratio=ar,
+            ptv_min_kg=ptv_min, ptv_max_kg=ptv_max,
+        )
+
+    def test_default_year_1985_fails(self):
+        """Year 1985 fails with default plausibility (1990-2026)."""
+        wing = self._make_wing(year=1985)
+        sizes = [self._make_size()]
+        certs = [Certification(standard=CertStandard.EN, classification="B")]
+        mv = validate_model_data(wing, sizes, certs, "test")
+        checks = {i.check for i in mv.issues}
+        assert "implausible_year_released" in checks
+        assert mv.has_critical
+
+    def test_override_year_1985_passes(self):
+        """Year 1985 passes with overridden range (1980-2026)."""
+        wing = self._make_wing(year=1985)
+        sizes = [self._make_size()]
+        certs = [Certification(standard=CertStandard.EN, classification="B")]
+        mv = validate_model_data(
+            wing, sizes, certs, "test",
+            plausibility_overrides={"year_released": (1980, 2026)},
+        )
+        checks = {i.check for i in mv.issues}
+        assert "implausible_year_released" not in checks
+
+    def test_override_year_1979_still_fails(self):
+        """Year 1979 still fails even with overridden range (1980-2026)."""
+        wing = self._make_wing(year=1979)
+        sizes = [self._make_size()]
+        certs = [Certification(standard=CertStandard.EN, classification="B")]
+        mv = validate_model_data(
+            wing, sizes, certs, "test",
+            plausibility_overrides={"year_released": (1980, 2026)},
+        )
+        checks = {i.check for i in mv.issues}
+        assert "implausible_year_released" in checks
+
+    def test_skip_missing_suppresses_warnings(self):
+        """skip_missing_warnings suppresses missing_* checks."""
+        wing = WingModel(
+            name="Sparse", slug="test-sparse",
+            category=None, year_released=None,
+            is_current=True, cell_count=None,
+            manufacturer_url=None,
+        )
+        sizes = [SizeVariant(size_label="M", flat_area_m2=None, ptv_min_kg=None, ptv_max_kg=None)]
+        certs = []
+        mv = validate_model_data(wing, sizes, certs, "test", skip_missing_warnings=True)
+        missing_checks = [i.check for i in mv.issues if i.check.startswith("missing_")]
+        assert len(missing_checks) == 0
+        # no_certifications is also suppressed
+        assert "no_certifications" not in {i.check for i in mv.issues}
+
+    def test_skip_missing_keeps_critical(self):
+        """skip_missing_warnings does NOT suppress critical issues."""
+        wing = self._make_wing()
+        sizes = [self._make_size(ptv_min=120, ptv_max=80)]  # ptv_min > ptv_max
+        certs = [Certification(standard=CertStandard.EN, classification="B")]
+        mv = validate_model_data(wing, sizes, certs, "test", skip_missing_warnings=True)
+        assert mv.has_critical
+        checks = {i.check for i in mv.issues}
+        assert "ptv_min_gte_max" in checks
+
+    def test_combined_fredvol_profile(self):
+        """Simulates the fredvol validation profile: relaxed year + no missing warnings."""
+        wing = WingModel(
+            name="OldWing", slug="test-oldwing",
+            category=WingCategory.paraglider, year_released=1985,
+            is_current=False, cell_count=None,
+            manufacturer_url=None,
+        )
+        sizes = [SizeVariant(
+            size_label="M", flat_area_m2=25.0, flat_span_m=11.2,
+            flat_aspect_ratio=5.018, ptv_min_kg=80, ptv_max_kg=100,
+        )]
+        certs = []
+        mv = validate_model_data(
+            wing, sizes, certs, "test",
+            plausibility_overrides={"year_released": (1980, 2026)},
+            skip_missing_warnings=True,
+        )
+        # No critical issues — year 1985 accepted, missing fields suppressed
+        assert not mv.has_critical
+        # No missing_* warnings
+        missing_checks = [i.check for i in mv.issues if i.check.startswith("missing_")]
+        assert len(missing_checks) == 0
+
+    def test_default_params_unchanged(self):
+        """Default behavior unchanged when no overrides provided."""
+        wing = self._make_wing()
+        sizes = [self._make_size()]
+        certs = [Certification(standard=CertStandard.EN, classification="B")]
+        mv = validate_model_data(wing, sizes, certs, "test")
+        assert not mv.has_critical
+        assert mv.score == "✓"
