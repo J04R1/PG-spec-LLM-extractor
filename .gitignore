@@ -10,6 +10,7 @@ venv/
 data/dhv_cache/
 data/dhv_checkpoint.json
 output/md_cache/
+data/incomplete_data_todo/
 
 # Output data (generated, not tracked)
 output/*.json

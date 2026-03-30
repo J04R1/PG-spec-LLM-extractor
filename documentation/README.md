@@ -29,8 +29,9 @@ Iteration numbers are **global** across all folders (chronological project order
 | 18 | `ITERATION_18_SEED_YEAR_COLUMN_BUGFIX.md` | `data/` | Seed year column bugfix — `_build_wing_model()` read `year` instead of `year_released`/`year_discontinued`, silently dropping all year data from updated CSVs | Complete |
 | 19 | `ITERATION_19_EXTRACTOR_CERT_CELL_EXTRACTION.md` | `data/` | Extractor cert/cell extraction — markdown parser missing `"DHV"` and `"No of cells"` label mappings, silently dropping certifications and cell count | Complete |
 | 20 | `ITERATION_20_OZONE_MVP_DB.md` | `data/` | Ozone MVP DB — 116 models (22 current + 94 previous), 483 size variants, 368 certs. Quality 100%, staged JSON pipeline, category fix | Complete |
+| 21 | `ITERATION_21_DATA_CURATION.md` | `data/` | Data curation TUI — field_verifications table, per-model completeness score, interactive rich TUI + CLI patch workflow | In Progress |
 
-**Next iteration number: 21**
+**Next iteration number: 22**
 
 ---
 

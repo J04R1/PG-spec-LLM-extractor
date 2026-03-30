@@ -128,6 +128,20 @@ CREATE TABLE IF NOT EXISTS provenance (
     notes              TEXT,
     created_at         TEXT    DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
+
+CREATE TABLE IF NOT EXISTS field_verifications (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    table_name   TEXT    NOT NULL,
+    record_id    INTEGER NOT NULL,
+    field_name   TEXT    NOT NULL,
+    status       TEXT    NOT NULL DEFAULT 'pending'
+                 CHECK(status IN ('verified', 'not_available', 'pending_approval')),
+    source_url   TEXT,
+    verified_at  TEXT,
+    verified_by  TEXT    CHECK(verified_by IN ('user', 'agent')),
+    notes        TEXT,
+    UNIQUE(table_name, record_id, field_name)
+);
 """
 
 
@@ -331,25 +345,32 @@ class Database:
         ).fetchone()
 
         if row:
-            self.conn.execute(
-                """UPDATE certifications
-                SET classification = ?, ptv_min_kg = ?, ptv_max_kg = ?,
-                    test_lab = ?, report_number = ?, report_url = ?,
-                    test_date = ?, status = ?
-                WHERE id = ?""",
-                (
-                    cert.classification,
-                    cert.ptv_min_kg,
-                    cert.ptv_max_kg,
-                    cert.test_lab,
-                    cert.report_number,
-                    cert.report_url,
-                    str(cert.test_date) if cert.test_date else None,
-                    cert.status.value,
-                    row["id"],
-                ),
-            )
-            self.conn.commit()
+            # Skip fields that have already been manually verified
+            verified = self.get_verified_fields("certifications", row["id"])
+            update_map = {
+                "classification": cert.classification,
+                "ptv_min_kg": cert.ptv_min_kg,
+                "ptv_max_kg": cert.ptv_max_kg,
+                "test_lab": cert.test_lab,
+                "report_number": cert.report_number,
+                "report_url": cert.report_url,
+                "test_date": str(cert.test_date) if cert.test_date else None,
+                "status": cert.status.value,
+            }
+            updates = []
+            values = []
+            for col, new_val in update_map.items():
+                if col in verified:
+                    continue  # protect verified field from re-crawl overwrite
+                updates.append(f"{col} = ?")
+                values.append(new_val)
+            if updates:
+                values.append(row["id"])
+                self.conn.execute(
+                    f"UPDATE certifications SET {', '.join(updates)} WHERE id = ?",
+                    values,
+                )
+                self.conn.commit()
             return row["id"]
 
         cur = self.conn.execute(
@@ -376,6 +397,46 @@ class Database:
 
     # Backward compat alias
     insert_certification = upsert_certification
+
+    # ── Field verification helpers ──────────────────────────────────────────
+
+    def get_verified_fields(self, table_name: str, record_id: int) -> set[str]:
+        """Return the set of field names that are verified or not_available for a record."""
+        rows = self.conn.execute(
+            """SELECT field_name FROM field_verifications
+               WHERE table_name = ? AND record_id = ?
+               AND status IN ('verified', 'not_available')""",
+            (table_name, record_id),
+        ).fetchall()
+        return {r["field_name"] for r in rows}
+
+    def set_field_verification(
+        self,
+        table_name: str,
+        record_id: int,
+        field_name: str,
+        status: str,
+        source_url: str | None = None,
+        verified_by: str = "user",
+        notes: str | None = None,
+    ) -> None:
+        """Upsert a field verification record."""
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        self.conn.execute(
+            """INSERT INTO field_verifications
+               (table_name, record_id, field_name, status, source_url,
+                verified_at, verified_by, notes)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(table_name, record_id, field_name)
+               DO UPDATE SET status=excluded.status,
+                             source_url=excluded.source_url,
+                             verified_at=excluded.verified_at,
+                             verified_by=excluded.verified_by,
+                             notes=excluded.notes""",
+            (table_name, record_id, field_name, status,
+             source_url, now, verified_by, notes),
+        )
+        self.conn.commit()
 
     def delete_certifications_for_size(self, size_variant_id: int) -> int:
         """Delete all certification records for a size variant. Returns count deleted."""
