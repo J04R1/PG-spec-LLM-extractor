@@ -96,6 +96,20 @@ def _resolve_category(slug: str, staged_cat: str) -> str:
     return "paraglider"  # don't trust content-sniffed staged_cat; proton/proton-gt are XC wings
 
 
+# Bare LTF/DHV numeric classes (no "DHV" prefix on old Ozone spec pages)
+_LTF_BARE: dict[str, str] = {"1": "1", "1-2": "1-2", "2": "2", "2-3": "2-3", "3": "3"}
+
+# Dual LTF+EN transition-era certs — EN takes priority (case-insensitive lookup key)
+_DUAL_CERT: dict[str, tuple[str, str]] = {
+    "1 / a": ("EN", "A"),   "1/a": ("EN", "A"),
+    "1 / b": ("EN", "B"),   "1/b": ("EN", "B"),
+    "1-2 / b": ("EN", "B"), "1-2/b": ("EN", "B"),
+    "2/3": ("EN", "C"),
+    "b / 1-2": ("EN", "B"), "b/1-2": ("EN", "B"),
+    "2 / b": ("EN", "B"),
+}
+
+
 def _normalize_cert(raw: str | None) -> tuple[str, str] | None:
     """Return (standard, classification) or None if unparseable."""
     if not raw or raw.strip() in ("-", "—", ""):
@@ -117,6 +131,13 @@ def _normalize_cert(raw: str | None) -> tuple[str, str] | None:
     m = re.match(r"([A-D])$", raw.strip(), re.IGNORECASE)
     if m:
         return ("EN", m.group(1).upper())
+    # Dual LTF+EN (transition era) — EN takes priority
+    dual = _DUAL_CERT.get(raw.lower())
+    if dual:
+        return dual
+    # Bare LTF/DHV numeric class (e.g. "1", "1-2", "2", "2-3")
+    if raw in _LTF_BARE:
+        return ("LTF", _LTF_BARE[raw])
     if raw.lower() == "load test":
         return ("other", "Load test")
     return ("other", raw)

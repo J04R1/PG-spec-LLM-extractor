@@ -30,9 +30,14 @@ Iteration numbers are **global** across all folders (chronological project order
 | 19 | `ITERATION_19_EXTRACTOR_CERT_CELL_EXTRACTION.md` | `data/` | Extractor cert/cell extraction — markdown parser missing `"DHV"` and `"No of cells"` label mappings, silently dropping certifications and cell count | Complete |
 | 20 | `ITERATION_20_OZONE_MVP_DB.md` | `data/` | Ozone MVP DB — 116 models (22 current + 94 previous), 483 size variants, 368 certs. Quality 100%, staged JSON pipeline, category fix | Complete |
 | 21 | `ITERATION_21_DATA_CURATION.md` | `data/` | Data curation TUI — field_verifications table, per-model completeness score, interactive rich TUI + CLI patch workflow | In Progress |
-| 22 | `ITERATION_22_MODEL_NORMALISATION.md` | `data/` | Model list normalisation — category/sub_type split, is_current fix, Mantra M3 fix | Not Started |
+| 22 | `ITERATION_22_MODEL_NORMALISATION.md` | `data/` | Model list normalisation — category/sub_type split, is_current fix, Mantra M3 fix | Complete |
+| 23 | `ITERATION_23_CERT_NORMALISATION.md` | `data/` | Certification standard normalisation — 100 misclassified `other` rows fixed to LTF/EN, dual-cert policy, import_staged_to_db gap patched | Complete |
 
-**Next iteration number: 23**
+**Next iteration number: 24**
+
+## BACKLOG
+> **Planned (not yet started):** `ITERATION_XX_BGD_MVP_DB.md` — BGD MVP Database,
+> will be renumbered when execution begins.
 
 ---
 

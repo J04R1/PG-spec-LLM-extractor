@@ -27,6 +27,7 @@ from .models import (
     SizeVariant,
     WingCategory,
     WingModel,
+    WingSubType,
 )
 from .normalizer import make_model_slug, normalize_size_label
 from .validator import validate_model_data, ModelValidation
@@ -150,17 +151,17 @@ _TANDEM_PATTERNS = re.compile(
 _MOTOR_PATTERNS = re.compile(r"\bmotor\b", re.IGNORECASE)
 
 
-def _infer_category(name: str, certification: str) -> WingCategory:
-    """Infer wing category from model name and certification value."""
+def _infer_category(name: str, certification: str) -> tuple[WingCategory, WingSubType | None]:
+    """Infer wing category and sub_type from model name and certification value."""
     if _MOTOR_PATTERNS.search(name):
-        return WingCategory.paramotor
+        return WingCategory.paramotor, None
     if _TANDEM_PATTERNS.search(name):
-        return WingCategory.tandem
+        return WingCategory.paraglider, WingSubType.tandem
     if certification in ("AFNOR_Biplace", "Load"):
-        return WingCategory.tandem
+        return WingCategory.paraglider, WingSubType.tandem
     if certification == "DGAC" or certification == "DUVL":
-        return WingCategory.paramotor
-    return WingCategory.paraglider
+        return WingCategory.paramotor, None
+    return WingCategory.paraglider, WingSubType.solo
 
 
 # ── Import function ───────────────────────────────────────────────────────────
@@ -261,7 +262,7 @@ def import_fredvol_csv(
 
         # Infer category
         cert_val = first.get("certification", "").strip()
-        category = _infer_category(model_name, cert_val)
+        category, sub_type = _infer_category(model_name, cert_val)
         source = first.get("source", "").strip()
 
         # Build WingModel
@@ -270,6 +271,7 @@ def import_fredvol_csv(
             name=model_name,
             slug=model_slug,
             category=category,
+            sub_type=sub_type,
             year_released=_safe_int(first.get("year", "")),
             is_current=False,
         )

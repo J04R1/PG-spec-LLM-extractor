@@ -23,6 +23,7 @@ from .models import (
     SizeVariant,
     TargetUse,
     WingModel,
+    WingSubType,
 )
 
 logger = logging.getLogger(__name__)
@@ -45,8 +46,10 @@ CREATE TABLE IF NOT EXISTS models (
     name              TEXT    NOT NULL,
     slug              TEXT    UNIQUE NOT NULL,
     category          TEXT    NOT NULL CHECK(category IN (
-                        'paraglider','tandem','miniwing','single_skin',
-                        'acro','speedwing','paramotor'
+                        'paraglider','paramotor','speedwing'
+                      )),
+    sub_type          TEXT    CHECK(sub_type IN (
+                        'solo','tandem','acro','miniwing','single_skin'
                       )),
     year_released     INTEGER,
     year_discontinued INTEGER,
@@ -153,6 +156,24 @@ class Database:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._conn: sqlite3.Connection | None = None
 
+    def _migrate_v22(self) -> None:
+        """Add sub_type column and migrate category data (Iteration 22)."""
+        cols = {row[1] for row in self._conn.execute("PRAGMA table_info(models)")}
+        if "sub_type" in cols:
+            return
+        self._conn.execute("ALTER TABLE models ADD COLUMN sub_type TEXT")
+        self._conn.execute(
+            "UPDATE models SET category='paraglider', sub_type='tandem' WHERE category='tandem'"
+        )
+        self._conn.execute(
+            "UPDATE models SET category='paraglider', sub_type='acro' WHERE category='acro'"
+        )
+        self._conn.execute(
+            "UPDATE models SET sub_type='solo' WHERE category='paraglider' AND sub_type IS NULL"
+        )
+        self._conn.commit()
+        logger.info("Migration v22: sub_type column added and data migrated")
+
     def connect(self) -> None:
         """Open connection and initialize schema."""
         self._conn = sqlite3.connect(str(self.db_path))
@@ -160,6 +181,7 @@ class Database:
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA foreign_keys=ON")
         self._conn.executescript(SCHEMA_SQL)
+        self._migrate_v22()
 
     def close(self) -> None:
         if self._conn:
@@ -201,6 +223,7 @@ class Database:
             fill_fields = {
                 "year_released": model.year_released,
                 "year_discontinued": model.year_discontinued,
+                "sub_type": model.sub_type.value if model.sub_type else None,
                 "cell_count": model.cell_count,
                 "riser_config": model.riser_config,
                 "manufacturer_url": model.manufacturer_url,
@@ -225,15 +248,16 @@ class Database:
 
         cur = self.conn.execute(
             """INSERT INTO models
-            (manufacturer_id, name, slug, category, year_released,
+            (manufacturer_id, name, slug, category, sub_type, year_released,
              year_discontinued, is_current, cell_count,
              riser_config, manufacturer_url)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 manufacturer_id,
                 model.name,
                 model.slug,
                 model.category.value if model.category else "paraglider",
+                model.sub_type.value if model.sub_type else None,
                 model.year_released,
                 model.year_discontinued,
                 1 if model.is_current else 0,

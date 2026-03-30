@@ -27,6 +27,7 @@ from .models import (
     SizeVariant,
     WingCategory,
     WingModel,
+    WingSubType,
 )
 from .normalizer import make_model_slug, normalize_size_label
 from .validator import validate_model_data, ModelValidation
@@ -261,6 +262,7 @@ def import_dhv_csv(
                 name=model_name,
                 slug=model_slug,
                 category=WingCategory.paraglider,
+                sub_type=WingSubType.solo,
                 is_current=False,
             )
             model_id = db.upsert_model(wing, mfr_id)

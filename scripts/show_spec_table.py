@@ -33,11 +33,16 @@ def show_table(slug: str):
         cur.execute("SELECT * FROM size_variants WHERE id=?", (sv_id,))
         sv = dict(cur.fetchone())
         cur.execute(
-            "SELECT classification FROM certifications WHERE size_variant_id=?",
+            "SELECT standard, classification FROM certifications WHERE size_variant_id=?",
             (sv_id,)
         )
         cert = cur.fetchone()
-        sv["certification"] = cert[0] if cert else "—"
+        if cert and cert[0] and cert[1]:
+            sv["certification"] = f"{cert[0]} {cert[1]}"
+        elif cert and cert[1]:
+            sv["certification"] = cert[1]
+        else:
+            sv["certification"] = "—"
         rows_data[label] = sv
 
     conn.close()

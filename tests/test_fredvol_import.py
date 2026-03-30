@@ -15,7 +15,7 @@ from src.fredvol_import import (
     _slugify_manufacturer,
     import_fredvol_csv,
 )
-from src.models import CertStandard, WingCategory
+from src.models import CertStandard, WingCategory, WingSubType
 
 
 # ── Manufacturer slug normalization ───────────────────────────────────────────
@@ -140,22 +140,22 @@ class TestCertificationMapping:
 
 class TestCategoryInference:
     def test_motor_in_name(self):
-        assert _infer_category("Alpha 6 Motor", "") == WingCategory.paramotor
+        assert _infer_category("Alpha 6 Motor", "") == (WingCategory.paramotor, None)
 
     def test_tandem_in_name(self):
-        assert _infer_category("Bi Beta 5", "") == WingCategory.tandem
+        assert _infer_category("Bi Beta 5", "") == (WingCategory.paraglider, WingSubType.tandem)
 
     def test_biplace_cert(self):
-        assert _infer_category("SomeWing", "AFNOR_Biplace") == WingCategory.tandem
+        assert _infer_category("SomeWing", "AFNOR_Biplace") == (WingCategory.paraglider, WingSubType.tandem)
 
     def test_load_cert(self):
-        assert _infer_category("SomeWing", "Load") == WingCategory.tandem
+        assert _infer_category("SomeWing", "Load") == (WingCategory.paraglider, WingSubType.tandem)
 
     def test_dgac_cert(self):
-        assert _infer_category("SomeWing", "DGAC") == WingCategory.paramotor
+        assert _infer_category("SomeWing", "DGAC") == (WingCategory.paramotor, None)
 
     def test_default_paraglider(self):
-        assert _infer_category("Rush 6", "B") == WingCategory.paraglider
+        assert _infer_category("Rush 6", "B") == (WingCategory.paraglider, WingSubType.solo)
 
 
 # ── Full import integration ──────────────────────────────────────────────────

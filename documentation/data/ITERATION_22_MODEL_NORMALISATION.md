@@ -1,7 +1,8 @@
 # Iteration 22 — Model List Normalisation
 
-**Status:** Not Started
+**Status:** Complete
 **Created:** 2026-03-30
+**Completed:** 2026-03-30
 **Domain:** data
 **Prerequisite:** Iteration 20 (Ozone MVP DB), Iteration 21 (Data curation TUI)
 

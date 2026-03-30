@@ -38,7 +38,7 @@ from rich.table import Table
 
 # Fields that must be populated (or marked not_available) for status = "complete"
 REQUIRED_FIELDS: dict[str, list[str]] = {
-    "models": ["category", "year_released", "cell_count"],
+    "models": ["category", "sub_type", "year_released", "cell_count"],
     "size_variants": ["flat_area_m2", "flat_span_m", "proj_area_m2", "ptv_min_kg", "ptv_max_kg"],
     "certifications": ["standard", "classification"],
 }
@@ -60,7 +60,8 @@ ALL_KNOWN_FIELDS: frozenset[str] = frozenset(
 
 # Human-readable metadata per field (desc, range, optional numeric bounds)
 FIELD_META: dict[str, dict[str, Any]] = {
-    "category":           {"desc": "Wing category", "range": "paraglider|tandem|miniwing|single_skin|acro|speedwing|paramotor"},
+    "category":           {"desc": "Wing category", "range": "paraglider|paramotor|speedwing"},
+    "sub_type":           {"desc": "Wing sub-type", "range": "solo|tandem|acro|miniwing|single_skin"},
     "year_released":      {"desc": "Year first released", "range": "1990–2030", "min": 1990, "max": 2030, "int": True},
     "year_discontinued":  {"desc": "Year production ended", "range": "1990–2030", "min": 1990, "max": 2030, "int": True},
     "cell_count":         {"desc": "Number of cells", "range": "15–120", "min": 15, "max": 120, "int": True},
@@ -476,8 +477,9 @@ def render_model_detail(console: Console, conn: sqlite3.Connection, model_id: in
     year = model["year_released"] or "?"
     disc = f"–{model['year_discontinued']}" if model["year_discontinued"] else "–?"
     cells = model["cell_count"] or "?"
+    sub = f"/{model['sub_type']}" if model["sub_type"] else ""
     title = (
-        f"[bold]{model['name']}[/bold]  ·  {model['category']}  "
+        f"[bold]{model['name']}[/bold]  ·  {model['category']}{sub}  "
         f"·  {year}{disc}  ·  {cells} cells"
     )
     console.print(Panel(title, box=box.ROUNDED))

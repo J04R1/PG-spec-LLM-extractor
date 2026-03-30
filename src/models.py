@@ -28,12 +28,16 @@ from pydantic import BaseModel, Field
 
 class WingCategory(str, Enum):
     paraglider = "paraglider"
+    paramotor = "paramotor"
+    speedwing = "speedwing"
+
+
+class WingSubType(str, Enum):
+    solo = "solo"
     tandem = "tandem"
+    acro = "acro"
     miniwing = "miniwing"
     single_skin = "single_skin"
-    acro = "acro"
-    speedwing = "speedwing"
-    paramotor = "paramotor"
 
 
 class TargetUse(str, Enum):
@@ -90,6 +94,7 @@ class WingModel(BaseModel):
     name: str
     slug: str = Field(..., description="Format: {manufacturer_slug}-{model_slug}")
     category: Optional[WingCategory] = None
+    sub_type: Optional[WingSubType] = None
     year_released: Optional[int] = None
     year_discontinued: Optional[int] = None
     is_current: bool = True

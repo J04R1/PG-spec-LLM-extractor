@@ -14,6 +14,7 @@ from src.models import (
     TargetUse,
     WingCategory,
     WingModel,
+    WingSubType,
 )
 
 
@@ -77,8 +78,16 @@ class TestSizeSpec:
 class TestEnums:
     def test_wing_category_values(self):
         assert WingCategory.paraglider.value == "paraglider"
-        assert WingCategory.tandem.value == "tandem"
-        assert WingCategory.miniwing.value == "miniwing"
+        assert WingCategory.paramotor.value == "paramotor"
+        assert WingCategory.speedwing.value == "speedwing"
+        assert len(WingCategory) == 3
+
+    def test_wing_sub_type_values(self):
+        assert WingSubType.solo.value == "solo"
+        assert WingSubType.tandem.value == "tandem"
+        assert WingSubType.acro.value == "acro"
+        assert WingSubType.miniwing.value == "miniwing"
+        assert WingSubType.single_skin.value == "single_skin"
 
     def test_target_use_values(self):
         assert TargetUse.xc.value == "xc"
