@@ -36,8 +36,10 @@ Iteration numbers are **global** across all folders (chronological project order
 **Next iteration number: 24**
 
 ## BACKLOG
-> **Planned (not yet started):** `ITERATION_XX_BGD_MVP_DB.md` — BGD MVP Database,
-> will be renumbered when execution begins.
+> **Planned (not yet started):**
+> - `ITERATION_XX_BGD_MVP_DB.md` — BGD MVP Database (next available number: 24)
+> - `ITERATION_YY_SUPAIR_MVP_DB.md` — Supair MVP Database (next available number: 25)
+> Both will be renumbered when execution begins.
 
 ---
 
