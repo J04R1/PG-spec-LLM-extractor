@@ -11,6 +11,7 @@ Handles:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -170,30 +171,89 @@ def deduplicate_urls(
 # ── Crawler ────────────────────────────────────────────────────────────────
 
 
+# Default markdown cache directory (relative to project root)
+_DEFAULT_MD_CACHE_DIR = Path("output/md_cache")
+
+
 class Crawler:
-    """Crawl4AI-based page renderer and URL discovery engine."""
+    """Crawl4AI-based page renderer and URL discovery engine.
+
+    Page markdown is cached on disk by default so each URL is only
+    rendered once.  Pass ``force=True`` to ``render_page()`` to bypass
+    the cache and fetch a fresh copy.
+    """
 
     def __init__(
         self,
         rate_limit_ms: int = 1500,
         jitter_ms: int = 1000,
         user_agent: str = USER_AGENT,
+        md_cache_dir: Optional[Path] = _DEFAULT_MD_CACHE_DIR,
     ):
         self.rate_limit_ms = rate_limit_ms
         self.jitter_ms = jitter_ms
         self.user_agent = user_agent
         self._last_request_time: float = 0
         self._robots = RobotsChecker(user_agent=user_agent)
+        self._md_cache_dir: Optional[Path] = md_cache_dir
+        if self._md_cache_dir:
+            self._md_cache_dir.mkdir(parents=True, exist_ok=True)
 
-    async def render_page(self, url: str) -> Optional[str]:
+    # ── Markdown cache helpers ────────────────────────────────────────────
+
+    def _cache_path(self, url: str) -> Optional[Path]:
+        """Return the cache file path for a URL, or None if caching is disabled."""
+        if not self._md_cache_dir:
+            return None
+        key = hashlib.sha256(url.encode()).hexdigest()
+        return self._md_cache_dir / f"{key}.md"
+
+    def _cache_read(self, url: str) -> Optional[str]:
+        """Return cached markdown for url, or None if not cached."""
+        path = self._cache_path(url)
+        if path and path.exists():
+            logger.debug("Cache hit: %s", url)
+            return path.read_text(encoding="utf-8")
+        return None
+
+    def _cache_write(self, url: str, markdown: str) -> None:
+        """Write markdown to the cache for url."""
+        path = self._cache_path(url)
+        if path:
+            path.write_text(markdown, encoding="utf-8")
+            logger.debug("Cached: %s → %s", url, path.name)
+
+    def cache_invalidate(self, url: str) -> bool:
+        """Delete the cached markdown for a URL.  Returns True if a file was removed."""
+        path = self._cache_path(url)
+        if path and path.exists():
+            path.unlink()
+            logger.info("Cache invalidated: %s", url)
+            return True
+        return False
+
+    async def render_page(self, url: str, force: bool = False) -> Optional[str]:
         """Fetch and render a URL to markdown via Crawl4AI.
 
-        Enforces robots.txt and rate limiting before each request.
+        Checks the on-disk markdown cache first.  If a cached copy exists and
+        ``force`` is False, it is returned immediately without any network
+        request.  On a cache miss (or when ``force=True``) the page is fetched,
+        the result is written to cache, and the markdown is returned.
+
+        Args:
+            url:   Page URL to render.
+            force: Bypass cache and always re-crawl.  Overwrites any existing
+                   cached copy.
 
         Returns:
             Markdown content of the page, or None on failure.
         """
         from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode
+
+        if not force:
+            cached = self._cache_read(url)
+            if cached is not None:
+                return cached
 
         if not self._robots.is_allowed(url):
             logger.warning("Blocked by robots.txt: %s", url)
@@ -211,6 +271,7 @@ class Crawler:
             logger.error("Render failed for %s: %s", url, result.error_message)
             return None
 
+        self._cache_write(url, result.markdown)
         return result.markdown
 
     async def discover_urls(

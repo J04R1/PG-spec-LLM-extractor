@@ -10,6 +10,9 @@ from src.markdown_parser import parse_specs_from_markdown
 
 from conftest import (
     ADVANCE_IOTA_DLS_MARKDOWN,
+    BUZZ_CELL_COUNT,
+    BUZZ_EXPECTED,
+    BUZZ_MARKDOWN,
     IOTA_DLS_CELL_COUNT,
     IOTA_DLS_EXPECTED,
     RUSH6_EXPECTED,
@@ -25,6 +28,7 @@ from conftest import (
 SWIFT6_URL = "https://flyozone.com/paragliders/products/gliders/swift-6"
 RUSH6_URL = "https://flyozone.com/paragliders/en/products/gliders/rush-6/info/"
 IOTA_DLS_URL = "https://advance.swiss/en/paragliders/iota-dls"
+BUZZ_URL = "https://flyozone.com/paragliders/products/gliders/buzz"
 
 
 class TestSwift6FullExtraction:
@@ -209,3 +213,69 @@ class TestParserEdgeCases:
         result = parse_specs_from_markdown(md, "https://example.com/products/alpha-7")
         assert result is not None
         assert result.model_name == "Alpha 7"
+
+
+class TestBuzzDHVAndCellCount:
+    """Test Ozone Buzz: 'No of cells' label and DHV certification parsing (Iteration 19)."""
+
+    def test_buzz_parses_successfully(self):
+        result = parse_specs_from_markdown(BUZZ_MARKDOWN, BUZZ_URL)
+        assert result is not None, "Parser returned None for Buzz table"
+
+    def test_buzz_model_name(self):
+        result = parse_specs_from_markdown(BUZZ_MARKDOWN, BUZZ_URL)
+        assert result.model_name == "Buzz"
+
+    def test_buzz_no_of_cells_extraction(self):
+        """Verify 'No of cells' label is recognized and parsed."""
+        result = parse_specs_from_markdown(BUZZ_MARKDOWN, BUZZ_URL)
+        assert result.cell_count == BUZZ_CELL_COUNT, (
+            f"Expected cell_count={BUZZ_CELL_COUNT}, got {result.cell_count}"
+        )
+
+    def test_buzz_size_count(self):
+        result = parse_specs_from_markdown(BUZZ_MARKDOWN, BUZZ_URL)
+        assert len(result.sizes) == 5, f"Expected 5 sizes, got {len(result.sizes)}"
+
+    def test_buzz_size_labels(self):
+        result = parse_specs_from_markdown(BUZZ_MARKDOWN, BUZZ_URL)
+        labels = [s.size_label for s in result.sizes]
+        assert labels == ["XS", "S", "M", "L", "XL"]
+
+    def test_buzz_xs_specs(self):
+        result = parse_specs_from_markdown(BUZZ_MARKDOWN, BUZZ_URL)
+        xs = next(s for s in result.sizes if s.size_label == "XS")
+        assert_size_specs(xs, BUZZ_EXPECTED["XS"], "XS")
+
+    def test_buzz_s_specs(self):
+        result = parse_specs_from_markdown(BUZZ_MARKDOWN, BUZZ_URL)
+        s = next(s for s in result.sizes if s.size_label == "S")
+        assert_size_specs(s, BUZZ_EXPECTED["S"], "S")
+
+    def test_buzz_m_specs(self):
+        result = parse_specs_from_markdown(BUZZ_MARKDOWN, BUZZ_URL)
+        m = next(s for s in result.sizes if s.size_label == "M")
+        assert_size_specs(m, BUZZ_EXPECTED["M"], "M")
+
+    def test_buzz_l_specs(self):
+        result = parse_specs_from_markdown(BUZZ_MARKDOWN, BUZZ_URL)
+        l_size = next(s for s in result.sizes if s.size_label == "L")
+        assert_size_specs(l_size, BUZZ_EXPECTED["L"], "L")
+
+    def test_buzz_xl_specs(self):
+        result = parse_specs_from_markdown(BUZZ_MARKDOWN, BUZZ_URL)
+        xl = next(s for s in result.sizes if s.size_label == "XL")
+        assert_size_specs(xl, BUZZ_EXPECTED["XL"], "XL")
+
+    def test_buzz_dhv_certifications(self):
+        """Verify DHV label is recognized and certifications are per-size."""
+        result = parse_specs_from_markdown(BUZZ_MARKDOWN, BUZZ_URL)
+        for s in result.sizes:
+            assert s.certification is not None, (
+                f"{s.size_label} missing certification from DHV label"
+            )
+            # DHV 1-2 is preserved by normalizer as LTF 1-2 (see normalizer.py)
+            assert "1-2" in s.certification, (
+                f"{s.size_label} cert should contain '1-2', got '{s.certification}'"
+            )
+

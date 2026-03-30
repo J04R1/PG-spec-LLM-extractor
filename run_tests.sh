@@ -6,7 +6,7 @@ echo "  PG Spec Extractor — Test Suite (Iteration 09)"
 echo "══════════════════════════════════════════════════════"
 echo ""
 
-python -m pytest tests/ -v --tb=short -x "$@"
+.venv/bin/python -m pytest tests/ -v --tb=short -x "$@"
 
 echo ""
 echo "══════════════════════════════════════════════════════"

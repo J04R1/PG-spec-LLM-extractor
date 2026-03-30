@@ -23,6 +23,8 @@ logger = logging.getLogger(__name__)
 _MD_ROW_MAP: dict[str, tuple[str, bool, bool]] = {
     # Cell count (model-level)
     "number of cells":                 ("cell_count",         False, False),
+    "no of cells":                     ("cell_count",         False, False),
+    "no. of cells":                    ("cell_count",         False, False),
     "cells":                           ("cell_count",         False, False),
     # Flat geometry
     "flat area":                       ("flat_area_m2",       True,  False),
@@ -53,13 +55,19 @@ _MD_ROW_MAP: dict[str, tuple[str, bool, bool]] = {
     # Certification
     "en":                              ("certification",      True,  False),
     "en/ltf":                          ("certification",      True,  False),
+    "en / ltf":                        ("certification",      True,  False),
     "ltf / en":                        ("certification",      True,  False),
+    "ltf/en":                          ("certification",      True,  False),
+    "dhv":                             ("certification",      True,  False),
+    "dhv/ltf":                         ("certification",      True,  False),
     "certification":                   ("certification",      True,  False),
     "ltf":                             ("certification",      True,  False),
     # Short label variants (older Ozone pages)
     "area flat":                       ("flat_area_m2",       True,  False),
     "area proj.":                      ("proj_area_m2",       True,  False),
     "area proj":                       ("proj_area_m2",       True,  False),
+    "proj.area":                       ("proj_area_m2",       True,  False),
+    "area":                            ("flat_area_m2",       True,  False),
     "span flat":                       ("flat_span_m",        True,  False),
     "span proj.":                      ("proj_span_m",        True,  False),
     "span proj":                       ("proj_span_m",        True,  False),
@@ -241,6 +249,9 @@ def parse_specs_from_markdown(
 
         label_stripped = re.sub(r"\s*\*\w[\w\s]*$", "", label).strip()
         label_low = _strip_md_formatting(label_stripped).lower().strip()
+        # Strip trailing single-letter footnote markers attached to unit suffixes
+        # e.g. "Projected area (m2)n" → "projected area (m2)" (old Ozone pages)
+        label_low = re.sub(r"(\([^)]+\))[a-z]\s*$", r"\1", label_low)
         label_clean = re.sub(r"\s*\(.*?\)\s*$", "", label_low).strip()
 
         mapping = _MD_ROW_MAP.get(label_low) or _MD_ROW_MAP.get(label_clean)

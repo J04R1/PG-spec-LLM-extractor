@@ -198,6 +198,59 @@ RUSH6_EXPECTED = {
     "L": {"flat_area_m2": 27.62, "ptv_min_kg": 100.0, "ptv_max_kg": 125.0},
 }
 
+# ── Ground truth: Ozone Buzz (tests "No of cells" and "DHV" labels) ────────
+
+BUZZ_MARKDOWN = """\
+# Buzz
+
+Easy flying, accessible performance.
+
+## Specifications
+
+| | XS | S | M | L | XL |
+|---|---|---|---|---|---|
+| No of cells | 42 | 42 | 42 | 42 | 42 |
+| Flat area (m2) | 19,55 | 20,93 | 22,7 | 24,86 | 27,25 |
+| Flat span (m) | 10,23 | 10,56 | 10,92 | 11,32 | 11,75 |
+| Flat aspect ratio | 5,35 | 5,35 | 5,35 | 5,35 | 5,35 |
+| Projected area (m2) | 16,2 | 17,35 | 18,75 | 20,5 | 22,5 |
+| Projected span (m) | 8,07 | 8,35 | 8,62 | 8,95 | 9,29 |
+| Projected aspect ratio | 4,01 | 4,01 | 4,01 | 4,01 | 4,01 |
+| Glider weight (kg) | 3,6 | 3,8 | 4,05 | 4,35 | 4,65 |
+| In-flight weight range (kg) | 55-70 | 65-85 | 80-100 | 95-115 | 110-135 |
+| DHV | 1-2 | 1-2 | 1-2 | 1-2 | 1-2 |
+"""
+
+BUZZ_CELL_COUNT = 42
+
+BUZZ_EXPECTED = {
+    "XS": {
+        "flat_area_m2": 19.55, "flat_span_m": 10.23, "flat_aspect_ratio": 5.35,
+        "proj_area_m2": 16.2, "proj_span_m": 8.07, "proj_aspect_ratio": 4.01,
+        "wing_weight_kg": 3.6, "ptv_min_kg": 55.0, "ptv_max_kg": 70.0,
+    },
+    "S": {
+        "flat_area_m2": 20.93, "flat_span_m": 10.56, "flat_aspect_ratio": 5.35,
+        "proj_area_m2": 17.35, "proj_span_m": 8.35, "proj_aspect_ratio": 4.01,
+        "wing_weight_kg": 3.8, "ptv_min_kg": 65.0, "ptv_max_kg": 85.0,
+    },
+    "M": {
+        "flat_area_m2": 22.7, "flat_span_m": 10.92, "flat_aspect_ratio": 5.35,
+        "proj_area_m2": 18.75, "proj_span_m": 8.62, "proj_aspect_ratio": 4.01,
+        "wing_weight_kg": 4.05, "ptv_min_kg": 80.0, "ptv_max_kg": 100.0,
+    },
+    "L": {
+        "flat_area_m2": 24.86, "flat_span_m": 11.32, "flat_aspect_ratio": 5.35,
+        "proj_area_m2": 20.5, "proj_span_m": 8.95, "proj_aspect_ratio": 4.01,
+        "wing_weight_kg": 4.35, "ptv_min_kg": 95.0, "ptv_max_kg": 115.0,
+    },
+    "XL": {
+        "flat_area_m2": 27.25, "flat_span_m": 11.75, "flat_aspect_ratio": 5.35,
+        "proj_area_m2": 22.5, "proj_span_m": 9.29, "proj_aspect_ratio": 4.01,
+        "wing_weight_kg": 4.65, "ptv_min_kg": 110.0, "ptv_max_kg": 135.0,
+    },
+}
+
 
 # ── Mock LLM adapters ─────────────────────────────────────────────────────
 

@@ -17,6 +17,7 @@ output/*.csv
 output/*.partial
 output/*.tmp
 output/*.db
+output/md_cache/
 !output/.gitkeep
 
 # OS

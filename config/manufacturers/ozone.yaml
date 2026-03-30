@@ -12,6 +12,12 @@ import:
     - path: data/ozone_enrichment.csv
       method: poc_markdown_parser
       label: "Base import (111 models from POC)"
+    - path: data/ozone_enrichment_all_by_LLM.csv
+      method: llm
+      label: "LLM enrichment — all fields for 43 models"
+    - path: data/ozone_year_updated_LLM_based_list.csv
+      method: llm
+      label: "Year corrections (Iteration 18)"
 
 sources:
   previous_gliders:
